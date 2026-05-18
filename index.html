@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>資産切り崩しシミュレーター</title>
+    <meta
+      name="description"
+      content="積立・取り崩し・年金・モンテカルロを含む資産シミュレーター。すべての計算はブラウザ内で完結します。"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="page-header">
+      <h1>資産切り崩しシミュレーター</h1>
+      <p class="subtitle">
+        積立 → 取り崩しの資産推移をモンテカルロで評価します。すべての計算はブラウザ内で完結し、データは外部送信されません。
+      </p>
+    </header>
+
+    <main class="layout">
+      <section class="panel inputs">
+        <h2>入力</h2>
+
+        <div class="field-group">
+          <h3>基本</h3>
+          <div class="field">
+            <label for="currentAge">現在の年齢（任意）</label>
+            <input id="currentAge" type="number" min="0" max="100" step="1" placeholder="例: 35" />
+          </div>
+          <div class="field">
+            <label for="initialAmount">初期投資額（円）</label>
+            <input id="initialAmount" type="number" min="0" step="10000" value="0" />
+          </div>
+          <div class="field">
+            <label for="monthlyContribution">月額積立（円）</label>
+            <input id="monthlyContribution" type="number" min="0" step="1000" value="50000" />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <h3>運用</h3>
+          <div class="field">
+            <label for="productPreset">商品プリセット</label>
+            <select id="productPreset">
+              <option value="custom">カスタム</option>
+              <option value="allcountry">オルカン (7.5% / 0.058%)</option>
+              <option value="sp500">S&amp;P 500 (10% / 0.08%)</option>
+              <option value="qqq">QQQ (12% / 0.20%)</option>
+              <option value="nikkei">日経平均 (7.5% / 0.14%)</option>
+              <option value="topix">TOPIX (6% / 0.14%)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="annualReturnRate">想定利回り（%/年）</label>
+            <input
+              id="annualReturnRate"
+              type="number"
+              min="0"
+              max="15"
+              step="0.1"
+              value="5"
+            />
+          </div>
+          <div class="field">
+            <label for="expenseRatio">信託報酬（%/年）</label>
+            <input id="expenseRatio" type="number" min="0" max="3" step="0.01" value="0.1" />
+          </div>
+          <div class="field">
+            <label for="volatility">ボラティリティ（%/年）</label>
+            <input id="volatility" type="number" min="5" max="30" step="1" value="15" />
+          </div>
+          <div class="field">
+            <label for="inflationRate">インフレ率（%/年）</label>
+            <input id="inflationRate" type="number" min="0" max="10" step="0.1" value="2" />
+          </div>
+          <div class="field checkbox-field">
+            <input id="taxFree" type="checkbox" />
+            <label for="taxFree">NISA 等の非課税口座として計算する</label>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <h3>期間</h3>
+          <div class="field">
+            <label for="contributionYears">積立年数</label>
+            <input id="contributionYears" type="number" min="0" max="70" step="1" value="30" />
+          </div>
+          <div class="field">
+            <label for="withdrawalStartYear">切崩開始（現在から○年後）</label>
+            <input
+              id="withdrawalStartYear"
+              type="number"
+              min="0"
+              max="65"
+              step="1"
+              value="30"
+            />
+          </div>
+          <div class="field">
+            <label for="withdrawalYears">切崩年数</label>
+            <input id="withdrawalYears" type="number" min="1" max="70" step="1" value="30" />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <h3>取り崩し</h3>
+          <div class="field">
+            <label for="withdrawalMode">取り崩しモード</label>
+            <select id="withdrawalMode">
+              <option value="amount">月額で指定</option>
+              <option value="rate">年率（%）で指定（Trinity Study）</option>
+            </select>
+          </div>
+          <div class="field" id="withdrawalAmountWrap">
+            <label for="fixedMonthlyWithdrawal">月額生活費（円）</label>
+            <input
+              id="fixedMonthlyWithdrawal"
+              type="number"
+              min="0"
+              step="10000"
+              value="250000"
+            />
+          </div>
+          <div class="field hidden" id="withdrawalRateWrap">
+            <label for="withdrawalRate">年間引出率（%）</label>
+            <input id="withdrawalRate" type="number" min="0" max="20" step="0.1" value="4" />
+          </div>
+          <div class="field checkbox-field" id="inflationAdjustedWithdrawalWrap">
+            <input id="inflationAdjustedWithdrawal" type="checkbox" />
+            <label for="inflationAdjustedWithdrawal">月額をインフレに連動させる</label>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <h3>年金・その他収入</h3>
+          <div class="field">
+            <label for="basePension">年金月額（65歳基準, 額面, 円）</label>
+            <input id="basePension" type="number" min="0" step="10000" value="0" />
+            <div class="preset-buttons">
+              <button type="button" id="pensionZero">なし</button>
+              <button type="button" id="pensionSingle">独身 (¥146,000)</button>
+              <button type="button" id="pensionCouple">夫婦 (¥292,000)</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="pensionStartAge">受給開始年齢（60–75）</label>
+            <input id="pensionStartAge" type="number" min="60" max="75" step="1" value="65" />
+          </div>
+          <div class="field">
+            <label for="monthlyOtherIncome">その他の月収（手取り, 円）</label>
+            <input id="monthlyOtherIncome" type="number" min="0" step="10000" value="0" />
+          </div>
+        </div>
+      </section>
+
+      <section class="panel results">
+        <h2>結果</h2>
+        <div id="summary" class="summary"></div>
+
+        <div class="chart-block">
+          <h3>積立・取り崩しの推移（決定論的, 名目値）</h3>
+          <div class="chart-wrap">
+            <canvas id="compoundChart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-block">
+          <h3>モンテカルロ・シミュレーション（5,000パス, 実質値）</h3>
+          <div class="chart-wrap">
+            <canvas id="mcChart"></canvas>
+          </div>
+          <p class="chart-note">
+            塗りつぶしは p10–p90 のレンジ。中央線は p50（中央値）。インフレ控除後の実質値で表示しています。
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="page-footer">
+      <p>
+        本ツールは過去の市場データやリスクを保証するものではなく、投資判断を保証するものではありません。
+        参考実装:
+        <a href="https://github.com/hiroppy/mf-dashboard/tree/main/apps/simulator" target="_blank" rel="noopener">
+          hiroppy/mf-dashboard
+        </a>
+      </p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
