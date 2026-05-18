@@ -1,7 +1,13 @@
 // モンテカルロ・シミュレーション（GBM、5000パス）
 // 実質値（インフレ控除後）で計算。再現性のため Mulberry32 + Box-Muller を使用。
 import { adjustedMonthlyPension } from "./pension.ts";
-import { TAX_RATE, needsRebalance, rebalanceBuckets, type CalculateParams } from "./calculate.ts";
+import {
+  TAX_RATE,
+  needsRebalance,
+  rebalanceBuckets,
+  type CalculateParams,
+  type MonthlyProjection,
+} from "./calculate.ts";
 
 const NUM_SIMULATIONS = 5000;
 const SEED = 42;
@@ -33,6 +39,7 @@ export interface MonteCarloResult {
   finalP50: number;
   finalP10: number;
   finalP90: number;
+  pivotMonthly: MonthlyProjection[];
 }
 
 export interface SecurityScoreInput {
@@ -135,10 +142,21 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       ? 1 / Math.pow(1 + ri, 1 / 12)
       : 1;
 
-  const rng = mulberry32(SEED);
   const N = NUM_SIMULATIONS;
   const initialRisk = initialAmount * (1 - dr);
   const initialDefense = initialAmount * dr;
+
+  // 本体ループを内部関数化している理由: pivotIndex=null（フェーズ1）と pivotIndex=非null（フェーズ2）の
+  // 間で RNG 消費順序を完全に揃えることで、両フェーズが同じパスを生成し再現性を保つ。
+  const runSimulation = (
+    pivotIndex: number | null,
+  ): {
+    yearly: MonteCarloYearly[];
+    failureProbability: number;
+    finalTotals: Float64Array | null;
+    pivotMonthly: MonthlyProjection[];
+  } => {
+  const rng = mulberry32(SEED);
   const riskPaths = new Float64Array(N).fill(initialRisk);
   const defensePaths = useDefense ? new Float64Array(N).fill(initialDefense) : null;
   const riskCostBasis = new Float64Array(N).fill(initialRisk);
@@ -151,6 +169,36 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     fixedMonthlyWithdrawal * preWithdrawalDeflation,
   );
   const totalPaths = new Float64Array(N);
+  const pivotMonthly: MonthlyProjection[] = [];
+
+  const pushPivotRow = (raw: {
+    year: number;
+    month: number;
+    riskTotal: number;
+    defenseTotal: number;
+    monthlyWithdrawal: number;
+    monthlyPension: number;
+    monthlyOtherIncome: number;
+    monthlyGainRisk: number;
+    monthlyGainDefense: number;
+    rebalanced: boolean;
+  }): void => {
+    pivotMonthly.push({
+      year: raw.year,
+      month: raw.month,
+      age: currentAge != null ? currentAge + raw.year : null,
+      riskTotal: Math.round(raw.riskTotal),
+      defenseTotal: Math.round(raw.defenseTotal),
+      total: Math.round(raw.riskTotal + raw.defenseTotal),
+      monthlyWithdrawal: Math.round(raw.monthlyWithdrawal),
+      monthlyPension: Math.round(raw.monthlyPension),
+      monthlyOtherIncome: Math.round(raw.monthlyOtherIncome),
+      monthlyGainRisk: Math.round(raw.monthlyGainRisk),
+      monthlyGainDefense: Math.round(raw.monthlyGainDefense),
+      monthlyGain: Math.round(raw.monthlyGainRisk + raw.monthlyGainDefense),
+      rebalanced: raw.rebalanced,
+    });
+  };
 
   const yearly: MonteCarloYearly[] = [
     {
@@ -191,10 +239,21 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
 
       if (useDefense && defensePaths !== null && defenseCostBasis !== null) {
         for (let i = 0; i < N; i++) {
+          const recordPivot = pivotIndex === i;
+          const prevRisk = riskPaths[i]!;
+          const prevDefense = defensePaths[i]!;
+
           const zRisk = normalRandom(rng);
           riskPaths[i]! *= Math.exp(monthlyDriftRisk + monthlySigmaRisk * zRisk);
           const zDef = normalRandom(rng);
           defensePaths[i]! *= Math.exp(monthlyDriftDef + monthlySigmaDef * zDef);
+
+          const gainRisk = riskPaths[i]! - prevRisk;
+          const gainDefense = defensePaths[i]! - prevDefense;
+          let monthlyWithdrawalRecorded = 0;
+          let pensionRecorded = 0;
+          let otherIncomeRecorded = 0;
+          let rebalancedRecorded = false;
 
           if (isContributing) {
             riskPaths[i]! += contribRisk;
@@ -238,6 +297,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
 
             const income = monthPension + monthlyOtherIncome;
             const netWithdrawal = Math.max(baseWithdrawal - income, 0);
+
+            if (recordPivot) {
+              pensionRecorded = monthPension;
+              otherIncomeRecorded = monthlyOtherIncome;
+            }
 
             if (netWithdrawal > 0) {
               let fromRisk: number;
@@ -287,6 +351,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
 
               cumulativeWithdrawals[i]! += drawnTotal;
               yearlyWithdrawals[i]! += drawnTotal;
+              if (recordPivot) monthlyWithdrawalRecorded = drawnTotal;
             }
           }
 
@@ -304,12 +369,36 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
                 dr,
                 taxRate,
               );
+            if (recordPivot) rebalancedRecorded = true;
+          }
+
+          if (recordPivot) {
+            pushPivotRow({
+              year,
+              month: m + 1,
+              riskTotal: riskPaths[i]!,
+              defenseTotal: defensePaths[i]!,
+              monthlyWithdrawal: monthlyWithdrawalRecorded,
+              monthlyPension: pensionRecorded,
+              monthlyOtherIncome: otherIncomeRecorded,
+              monthlyGainRisk: gainRisk,
+              monthlyGainDefense: gainDefense,
+              rebalanced: rebalancedRecorded,
+            });
           }
         }
       } else {
         for (let i = 0; i < N; i++) {
+          const recordPivot = pivotIndex === i;
+          const prevRisk = riskPaths[i]!;
+
           const z = normalRandom(rng);
           riskPaths[i]! *= Math.exp(monthlyDriftRisk + monthlySigmaRisk * z);
+
+          const gainRisk = riskPaths[i]! - prevRisk;
+          let monthlyWithdrawalRecorded = 0;
+          let pensionRecorded = 0;
+          let otherIncomeRecorded = 0;
 
           if (isContributing) {
             riskPaths[i]! += contribRisk;
@@ -336,6 +425,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
             const income = monthPension + monthlyOtherIncome;
             const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
+            if (recordPivot) {
+              pensionRecorded = monthPension;
+              otherIncomeRecorded = monthlyOtherIncome;
+            }
+
             if (netWithdrawal > 0) {
               const gainRatio =
                 riskPaths[i]! > riskCostBasis[i]!
@@ -349,7 +443,23 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
 
               cumulativeWithdrawals[i]! += netWithdrawal;
               yearlyWithdrawals[i]! += netWithdrawal;
+              if (recordPivot) monthlyWithdrawalRecorded = netWithdrawal;
             }
+          }
+
+          if (recordPivot) {
+            pushPivotRow({
+              year,
+              month: m + 1,
+              riskTotal: riskPaths[i]!,
+              defenseTotal: 0,
+              monthlyWithdrawal: monthlyWithdrawalRecorded,
+              monthlyPension: pensionRecorded,
+              monthlyOtherIncome: otherIncomeRecorded,
+              monthlyGainRisk: gainRisk,
+              monthlyGainDefense: 0,
+              rebalanced: false,
+            });
           }
         }
       }
@@ -389,21 +499,49 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const totalContributed =
     initialAmount + monthlyContribution * 12 * Math.min(contributionYears, totalYears);
   let failureCount = 0;
+  const finalTotals = pivotIndex === null ? new Float64Array(N) : null;
   for (let i = 0; i < N; i++) {
     const finalTotal =
       useDefense && defensePaths !== null
         ? riskPaths[i]! + defensePaths[i]!
         : riskPaths[i]!;
+    if (finalTotals !== null) finalTotals[i] = finalTotal;
     if (finalTotal + cumulativeWithdrawals[i]! < totalContributed) failureCount++;
   }
 
   return {
     yearly,
     failureProbability: failureCount / N,
-    depletionProbability: yearly[yearly.length - 1]!.depletionRate,
-    finalP50: yearly[yearly.length - 1]!.p50,
-    finalP10: yearly[yearly.length - 1]!.p10,
-    finalP90: yearly[yearly.length - 1]!.p90,
+    finalTotals,
+    pivotMonthly,
+  };
+  };
+
+  const phase1 = runSimulation(null);
+  const finalP50 = phase1.yearly[phase1.yearly.length - 1]!.p50;
+
+  // 最終 total が finalP50 に最も近いパスを特定。pivotMonthly はフェーズ2 で同じ index を抽出して取得する。
+  const finalTotals = phase1.finalTotals!;
+  let pivotIndex = 0;
+  let pivotDiff = Infinity;
+  for (let i = 0; i < N; i++) {
+    const diff = Math.abs(finalTotals[i]! - finalP50);
+    if (diff < pivotDiff) {
+      pivotDiff = diff;
+      pivotIndex = i;
+    }
+  }
+
+  const phase2 = runSimulation(pivotIndex);
+
+  return {
+    yearly: phase1.yearly,
+    failureProbability: phase1.failureProbability,
+    depletionProbability: phase1.yearly[phase1.yearly.length - 1]!.depletionRate,
+    finalP50,
+    finalP10: phase1.yearly[phase1.yearly.length - 1]!.p10,
+    finalP90: phase1.yearly[phase1.yearly.length - 1]!.p90,
+    pivotMonthly: phase2.pivotMonthly,
   };
 }
 

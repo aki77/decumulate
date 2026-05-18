@@ -39,6 +39,27 @@ export interface YearlyProjection {
   yearlyOtherIncome: number;
 }
 
+export interface MonthlyProjection {
+  year: number;
+  month: number;
+  age: number | null;
+  riskTotal: number;
+  defenseTotal: number;
+  total: number;
+  monthlyWithdrawal: number;
+  monthlyPension: number;
+  monthlyOtherIncome: number;
+  monthlyGainRisk: number;
+  monthlyGainDefense: number;
+  monthlyGain: number;
+  rebalanced: boolean;
+}
+
+export interface CompoundResult {
+  yearly: YearlyProjection[];
+  monthly: MonthlyProjection[];
+}
+
 // 1バケットから amount を取り崩し、含み益按分課税分も合わせて控除する。
 // 戻り値: [新しい total, 新しい principal]
 export function withdrawFromBucket(
@@ -119,7 +140,7 @@ export function rebalanceBuckets(
     : [riskTotal + proceeds, riskPrincipal + proceeds, newSrcTotal, newSrcPrincipal];
 }
 
-export function calculateCompound(params: CalculateParams): YearlyProjection[] {
+export function calculateCompound(params: CalculateParams): CompoundResult {
   const {
     initialAmount,
     monthlyContribution,
@@ -181,6 +202,7 @@ export function calculateCompound(params: CalculateParams): YearlyProjection[] {
       yearlyOtherIncome: 0,
     },
   ];
+  const monthlyArr: MonthlyProjection[] = [];
 
   for (let year = 1; year <= totalYears; year++) {
     const isContributing = year <= contributionYears;
@@ -191,8 +213,12 @@ export function calculateCompound(params: CalculateParams): YearlyProjection[] {
     let yearlyOtherIncome = 0;
 
     for (let m = 0; m < 12; m++) {
+      const prevRisk = riskTotal;
+      const prevDefense = defenseTotal;
       riskTotal *= 1 + monthlyRateRisk;
       defenseTotal *= 1 + monthlyRateDefense;
+      const gainRisk = riskTotal - prevRisk;
+      const gainDefense = defenseTotal - prevDefense;
 
       if (isContributing) {
         riskTotal += contribRisk;
@@ -202,6 +228,10 @@ export function calculateCompound(params: CalculateParams): YearlyProjection[] {
       }
 
       const currentTotal = riskTotal + defenseTotal;
+
+      let monthlyWithdrawal = 0;
+      let monthPension = 0;
+      let monthOtherIncome = 0;
 
       if (isWithdrawing && currentTotal > 0) {
         let baseWithdrawal: number;
@@ -226,8 +256,9 @@ export function calculateCompound(params: CalculateParams): YearlyProjection[] {
 
         const pensionActive =
           pensionStartYearOffset != null && year >= pensionStartYearOffset && monthlyPension > 0;
-        const monthPension = pensionActive ? monthlyPension : 0;
-        const income = monthPension + monthlyOtherIncome;
+        monthPension = pensionActive ? monthlyPension : 0;
+        monthOtherIncome = monthlyOtherIncome;
+        const income = monthPension + monthOtherIncome;
         const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
         const [fromRisk, fromDefense] = splitProportional(netWithdrawal, riskTotal, defenseTotal);
@@ -239,11 +270,13 @@ export function calculateCompound(params: CalculateParams): YearlyProjection[] {
           taxRate,
         );
 
-        yearlyWithdrawal += fromRisk + fromDefense;
+        monthlyWithdrawal = fromRisk + fromDefense;
+        yearlyWithdrawal += monthlyWithdrawal;
         yearlyPension += monthPension;
-        yearlyOtherIncome += monthlyOtherIncome;
+        yearlyOtherIncome += monthOtherIncome;
       }
 
+      let rebalanced = false;
       if (dr > 0 && needsRebalance(riskTotal, defenseTotal, dr, rebalanceThresholdPoint)) {
         [riskTotal, riskPrincipal, defenseTotal, defensePrincipal] = rebalanceBuckets(
           riskTotal,
@@ -253,7 +286,24 @@ export function calculateCompound(params: CalculateParams): YearlyProjection[] {
           dr,
           taxRate,
         );
+        rebalanced = true;
       }
+
+      monthlyArr.push({
+        year,
+        month: m + 1,
+        age: currentAge != null ? currentAge + year : null,
+        riskTotal: Math.round(riskTotal),
+        defenseTotal: Math.round(defenseTotal),
+        total: Math.round(riskTotal + defenseTotal),
+        monthlyWithdrawal: Math.round(monthlyWithdrawal),
+        monthlyPension: Math.round(monthPension),
+        monthlyOtherIncome: Math.round(monthOtherIncome),
+        monthlyGainRisk: Math.round(gainRisk),
+        monthlyGainDefense: Math.round(gainDefense),
+        monthlyGain: Math.round(gainRisk + gainDefense),
+        rebalanced,
+      });
     }
 
     // tax: 年末時点でまだ売却していない含み益に対する「もし全部売却したら」の試算税。
@@ -276,5 +326,5 @@ export function calculateCompound(params: CalculateParams): YearlyProjection[] {
     });
   }
 
-  return projections;
+  return { yearly: projections, monthly: monthlyArr };
 }

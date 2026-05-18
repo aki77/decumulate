@@ -224,3 +224,46 @@ test("simulateMonteCarlo (rate-risk) - シード固定で再現性あり", () =>
   assert.strictEqual(r1.finalP50, r2.finalP50);
   assert.strictEqual(r1.depletionProbability, r2.depletionProbability);
 });
+
+// --- pivotMonthly ---
+
+test("simulateMonteCarlo - pivotMonthly の長さは 12 × totalYears", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    contributionYears: 3,
+    withdrawalStartYear: 3,
+    withdrawalYears: 5,
+  };
+  const result = simulateMonteCarlo(params);
+  assert.strictEqual(result.pivotMonthly.length, 12 * 8);
+});
+
+test("simulateMonteCarlo - pivotMonthly 最終 entry の total が finalP50 に十分近い", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    initialAmount: 1000000,
+    monthlyContribution: 0,
+    contributionYears: 0,
+    withdrawalStartYear: 0,
+    withdrawalYears: 5,
+    fixedMonthlyWithdrawal: 1000,
+    volatility: 15,
+  };
+  const result = simulateMonteCarlo(params);
+  const last = result.pivotMonthly[result.pivotMonthly.length - 1]!;
+  // p50 は q(0.5) で finalTotals.sort() 後の Math.floor(N*0.5) 番目の値。
+  // 一方 pivot は |finalTotals[i] - finalP50| 最小の index なので、両者の差は finalP50 の数%以内に収まるはず。
+  const ratio = Math.abs(last.total - result.finalP50) / Math.max(result.finalP50, 1);
+  assert.ok(ratio < 0.01, `pivot最終total=${last.total} と finalP50=${result.finalP50} の差が大きすぎる`);
+});
+
+test("simulateMonteCarlo - 同パラメータでの 2 回呼び出しで pivotMonthly が完全一致", () => {
+  const params: MonteCarloParams = { ...BASE_PARAMS, withdrawalYears: 5 };
+  const r1 = simulateMonteCarlo(params);
+  const r2 = simulateMonteCarlo(params);
+  assert.strictEqual(r1.pivotMonthly.length, r2.pivotMonthly.length);
+  for (let i = 0; i < r1.pivotMonthly.length; i++) {
+    assert.strictEqual(r1.pivotMonthly[i]!.total, r2.pivotMonthly[i]!.total);
+    assert.strictEqual(r1.pivotMonthly[i]!.monthlyGain, r2.pivotMonthly[i]!.monthlyGain);
+  }
+});

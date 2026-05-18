@@ -1,4 +1,9 @@
-import { calculateCompound, type CalculateParams } from "./calculate.ts";
+import {
+  calculateCompound,
+  type CalculateParams,
+  type MonthlyProjection,
+  type YearlyProjection,
+} from "./calculate.ts";
 import {
   simulateMonteCarlo,
   computeSecurityScore,
@@ -168,7 +173,7 @@ let compoundChart: any = null;
 let mcChart: any = null;
 
 function renderCompoundChart(
-  projections: ReturnType<typeof calculateCompound>,
+  projections: YearlyProjection[],
   params: CalculateParams,
 ): void {
   const canvas = document.getElementById("compoundChart") as HTMLCanvasElement;
@@ -387,7 +392,7 @@ function renderMonteCarloChart(
 }
 
 function renderSummary(
-  projections: ReturnType<typeof calculateCompound>,
+  projections: YearlyProjection[],
   mc: ReturnType<typeof simulateMonteCarlo>,
   params: CalculateParams,
 ): void {
@@ -487,13 +492,75 @@ function resetInputs(): void {
   }
 }
 
+function formatMonthlyGain(yen: number): string {
+  if (!Number.isFinite(yen)) return "-";
+  const sign = Math.round(toMan(yen)) > 0 ? "+" : "";
+  return `${sign}${formatMan(yen)}`;
+}
+
+function renderMonthlyTable(monthly: MonthlyProjection[]): string {
+  if (monthly.length === 0) return "";
+  const byYear = new Map<number, MonthlyProjection[]>();
+  for (const m of monthly) {
+    const list = byYear.get(m.year);
+    if (list) list.push(m);
+    else byYear.set(m.year, [m]);
+  }
+  const parts: string[] = [];
+  for (const [year, rows] of byYear) {
+    const age = rows[0]!.age;
+    const yearLabel = age != null ? `${year}年目 / ${age}歳` : `${year}年目`;
+    const yearlyGain = rows.reduce((s, r) => s + r.monthlyGain, 0);
+    parts.push(
+      `<details class="monthly-year"><summary>${yearLabel} <span class="year-summary">年合計運用損益 ${formatMonthlyGain(yearlyGain)}</span></summary>`,
+    );
+    parts.push(
+      `<table class="monthly-table"><thead><tr>` +
+        `<th>月</th><th>リスク資産</th><th>防衛資産</th><th>合計</th>` +
+        `<th>純引出</th><th>年金</th><th>他収入</th>` +
+        `<th>リスク損益</th><th>防衛損益</th><th>リバランス</th>` +
+        `</tr></thead><tbody>`,
+    );
+    for (const r of rows) {
+      parts.push(
+        `<tr>` +
+          `<td>${r.month}月</td>` +
+          `<td>${formatMan(r.riskTotal)}</td>` +
+          `<td>${formatMan(r.defenseTotal)}</td>` +
+          `<td>${formatMan(r.total)}</td>` +
+          `<td>${formatMan(r.monthlyWithdrawal)}</td>` +
+          `<td>${formatMan(r.monthlyPension)}</td>` +
+          `<td>${formatMan(r.monthlyOtherIncome)}</td>` +
+          `<td class="${r.monthlyGainRisk < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainRisk)}</td>` +
+          `<td class="${r.monthlyGainDefense < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainDefense)}</td>` +
+          `<td>${r.rebalanced ? "●" : ""}</td>` +
+          `</tr>`,
+      );
+    }
+    parts.push(`</tbody></table></details>`);
+  }
+  return parts.join("");
+}
+
+function renderMonthlyDetails(
+  detMonthly: MonthlyProjection[],
+  mc: ReturnType<typeof simulateMonteCarlo>,
+): void {
+  const host = document.getElementById("monthlyDetails");
+  if (!host) return;
+  const detSection = `<details class="monthly-section"><summary>決定論的（月次, 名目値）</summary>${renderMonthlyTable(detMonthly)}</details>`;
+  const mcSection = `<details class="monthly-section"><summary>モンテカルロ中央値パス（月次, 実質値）</summary>${renderMonthlyTable(mc.pivotMonthly)}</details>`;
+  host.innerHTML = detSection + mcSection;
+}
+
 function update(): void {
   const params = readParams();
-  const projections = calculateCompound(params);
+  const { yearly, monthly } = calculateCompound(params);
   const mc = simulateMonteCarlo(params);
-  renderCompoundChart(projections, params);
+  renderCompoundChart(yearly, params);
   renderMonteCarloChart(mc, params);
-  renderSummary(projections, mc, params);
+  renderSummary(yearly, mc, params);
+  renderMonthlyDetails(monthly, mc);
   saveInputs();
 }
 

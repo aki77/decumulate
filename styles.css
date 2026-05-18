@@ -387,3 +387,71 @@ body {
 .page-footer a {
   color: var(--accent);
 }
+
+.monthly-details {
+  margin-top: 8px;
+}
+
+.monthly-details .monthly-section {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--panel);
+}
+
+.monthly-details .monthly-section > summary {
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.monthly-details .monthly-year {
+  border-top: 1px dashed var(--border);
+  padding: 6px 0;
+}
+
+.monthly-details .monthly-year > summary {
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 0;
+  color: var(--text);
+}
+
+.monthly-details .year-summary {
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+.monthly-details .monthly-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.monthly-details .monthly-table th,
+.monthly-details .monthly-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.monthly-details .monthly-table th:first-child,
+.monthly-details .monthly-table td:first-child {
+  text-align: left;
+}
+
+.monthly-details .monthly-table th {
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+}
+
+.monthly-details .monthly-table td.neg {
+  color: var(--danger);
+}
