@@ -158,32 +158,52 @@ test("needsRebalance - 残高合計ゼロはfalse", () => {
 // --- rebalanceBuckets ---
 
 test("rebalanceBuckets - 残高ゼロは変化なし", () => {
-  const [rt, rp, dt, dp] = rebalanceBuckets(0, 0, 0, 0, 0.3, TAX_RATE);
-  assert.strictEqual(rt, 0);
-  assert.strictEqual(rp, 0);
-  assert.strictEqual(dt, 0);
-  assert.strictEqual(dp, 0);
+  const r = rebalanceBuckets(0, 0, 0, 0, 0.3, TAX_RATE);
+  assert.strictEqual(r.riskTotal, 0);
+  assert.strictEqual(r.riskPrincipal, 0);
+  assert.strictEqual(r.defenseTotal, 0);
+  assert.strictEqual(r.defensePrincipal, 0);
+  assert.strictEqual(r.info, null);
 });
 
 test("rebalanceBuckets - 目標比率ちょうどは変化なし", () => {
-  const [rt, rp, dt, dp] = rebalanceBuckets(700, 700, 300, 300, 0.3, TAX_RATE);
-  assert.strictEqual(rt, 700);
-  assert.strictEqual(rp, 700);
-  assert.strictEqual(dt, 300);
-  assert.strictEqual(dp, 300);
+  const r = rebalanceBuckets(700, 700, 300, 300, 0.3, TAX_RATE);
+  assert.strictEqual(r.riskTotal, 700);
+  assert.strictEqual(r.riskPrincipal, 700);
+  assert.strictEqual(r.defenseTotal, 300);
+  assert.strictEqual(r.defensePrincipal, 300);
+  assert.strictEqual(r.info, null);
 });
 
 test("rebalanceBuckets - リスク売却ケース（防衛が目標より少ない）", () => {
   // total=1000, defenseRatio=0.3, currentDefense=200 → 100分リスクを売って防衛に回す
-  const [rt, , dt] = rebalanceBuckets(800, 800, 200, 200, 0.3, 0);
-  assert.ok(rt < 800); // リスク減
-  assert.ok(dt > 200); // 防衛増
+  const r = rebalanceBuckets(800, 800, 200, 200, 0.3, 0);
+  assert.ok(r.riskTotal < 800); // リスク減
+  assert.ok(r.defenseTotal > 200); // 防衛増
+  assert.ok(r.info != null);
+  assert.strictEqual(r.info!.direction, "risk-to-defense");
+  assert.ok(Math.abs(r.info!.sellAmount - 100) < 0.001);
+  assert.strictEqual(r.info!.taxAmount, 0); // taxRate=0
+  assert.ok(Math.abs(r.info!.proceeds - 100) < 0.001);
 });
 
 test("rebalanceBuckets - 防衛売却ケース（防衛が目標より多い）", () => {
-  const [rt, , dt] = rebalanceBuckets(500, 500, 500, 500, 0.3, 0);
-  assert.ok(rt > 500); // リスク増
-  assert.ok(dt < 500); // 防衛減
+  const r = rebalanceBuckets(500, 500, 500, 500, 0.3, 0);
+  assert.ok(r.riskTotal > 500); // リスク増
+  assert.ok(r.defenseTotal < 500); // 防衛減
+  assert.ok(r.info != null);
+  assert.strictEqual(r.info!.direction, "defense-to-risk");
+  assert.ok(Math.abs(r.info!.sellAmount - 200) < 0.001);
+});
+
+test("rebalanceBuckets - 含み益ありリスク売却で税額が発生", () => {
+  // riskTotal=800, riskPrincipal=400 → gainRatio=0.5
+  // sell=100 → tax = 100 * 0.5 * TAX_RATE
+  const r = rebalanceBuckets(800, 400, 200, 200, 0.3, TAX_RATE);
+  assert.ok(r.info != null);
+  const expectedTax = 100 * 0.5 * TAX_RATE;
+  assert.ok(Math.abs(r.info!.taxAmount - expectedTax) < 0.001);
+  assert.ok(Math.abs(r.info!.proceeds - (100 - expectedTax)) < 0.001);
 });
 
 // --- calculateCompound ---
@@ -400,8 +420,8 @@ test("calculateCompound - 高乖離初期値で1ヶ月目に rebalanced=true が
     withdrawalYears: 1,
   };
   const result = calculateCompound(params);
-  const rebalanced = result.monthly.some((m) => m.rebalanced);
-  assert.ok(rebalanced, "rebalanced=true となる月が少なくとも1つ存在すべき");
+  const rebalanced = result.monthly.some((m) => m.rebalanceInfo != null);
+  assert.ok(rebalanced, "リバランスが発生する月が少なくとも1つ存在すべき");
 });
 
 test("calculateCompound - 利回り0なら monthlyGain は 0、正利回りなら正", () => {

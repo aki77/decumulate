@@ -2,6 +2,7 @@ import {
   calculateCompound,
   type CalculateParams,
   type MonthlyProjection,
+  type RebalanceInfo,
   type YearlyProjection,
 } from "./calculate.ts";
 import {
@@ -517,6 +518,25 @@ function formatRate(rate: number): string {
   return `${sign}${(rate * 100).toFixed(2)}%`;
 }
 
+function ratioSub(ratio: number | null): string {
+  if (ratio == null) return "";
+  return `<span class="cell-sub">(${formatPercent(ratio)})</span>`;
+}
+
+function renderRebalanceBadge(info: RebalanceInfo | null): string {
+  if (!info) return "";
+  const dirLabel = info.direction === "risk-to-defense" ? "リスク → 防衛" : "防衛 → リスク";
+  const tip =
+    `${dirLabel}<br>` +
+    `売却額 ${formatMan(info.sellAmount)}<br>` +
+    `税額 ${formatMan(info.taxAmount)}<br>` +
+    `受取額 ${formatMan(info.proceeds)}`;
+  return (
+    `<span class="rebalance-badge" data-direction="${info.direction}" tabindex="0" aria-label="${dirLabel}">●` +
+    `<span class="rebalance-tip">${tip}</span></span>`
+  );
+}
+
 function renderMonthlyTable(monthly: MonthlyProjection[]): string {
   if (monthly.length === 0) return "";
   const byYear = new Map<number, MonthlyProjection[]>();
@@ -547,11 +567,13 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
     );
     for (const r of rows) {
       const band = classifyRateBand(r.monthlyRate, false);
+      const defenseRatio = r.total > 0 ? r.defenseTotal / r.total : null;
+      const riskRatio = defenseRatio != null ? 1 - defenseRatio : null;
       parts.push(
         `<tr>` +
           `<td>${r.month}月</td>` +
-          `<td>${formatMan(r.riskTotal)}</td>` +
-          `<td>${formatMan(r.defenseTotal)}</td>` +
+          `<td>${formatMan(r.riskTotal)}${ratioSub(riskRatio)}</td>` +
+          `<td>${formatMan(r.defenseTotal)}${ratioSub(defenseRatio)}</td>` +
           `<td>${formatMan(r.total)}</td>` +
           `<td>${formatMan(r.monthlyWithdrawal)}</td>` +
           `<td>${formatMan(r.monthlyPension)}</td>` +
@@ -559,7 +581,7 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
           `<td class="${r.monthlyGainRisk < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainRisk)}</td>` +
           `<td class="${r.monthlyGainDefense < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainDefense)}</td>` +
           `<td class="monthly-rate" data-rate-band="${band}">${formatRate(r.monthlyRate)}</td>` +
-          `<td>${r.rebalanced ? "●" : ""}</td>` +
+          `<td>${renderRebalanceBadge(r.rebalanceInfo)}</td>` +
           `</tr>`,
       );
     }

@@ -7,6 +7,7 @@ import {
   rebalanceBuckets,
   type CalculateParams,
   type MonthlyProjection,
+  type RebalanceInfo,
 } from "./calculate.ts";
 
 const NUM_SIMULATIONS = 5000;
@@ -211,7 +212,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       monthlyOtherIncome: number;
       monthlyGainRisk: number;
       monthlyGainDefense: number;
-      rebalanced: boolean;
+      rebalanceInfo: RebalanceInfo | null;
     },
   ): void => {
     const prevTotal = raw.prevRisk + raw.prevDefense;
@@ -231,7 +232,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       monthlyGainDefense: Math.round(raw.monthlyGainDefense),
       monthlyGain: Math.round(raw.monthlyGainRisk + raw.monthlyGainDefense),
       monthlyRate,
-      rebalanced: raw.rebalanced,
+      rebalanceInfo: raw.rebalanceInfo,
     };
     for (const k of keys) pivotMonthlies[k].push(row);
   };
@@ -290,7 +291,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
           let monthlyWithdrawalRecorded = 0;
           let pensionRecorded = 0;
           let otherIncomeRecorded = 0;
-          let rebalancedRecorded = false;
+          let rebalanceInfoRecorded: RebalanceInfo | null = null;
 
           if (isContributing) {
             riskPaths[i]! += contribRisk;
@@ -400,16 +401,19 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
             !shouldSkipRebalance &&
             needsRebalance(riskPaths[i]!, defensePaths[i]!, dr, rebalanceThresholdPoint)
           ) {
-            [riskPaths[i], riskCostBasis[i], defensePaths[i], defenseCostBasis[i]] =
-              rebalanceBuckets(
-                riskPaths[i]!,
-                riskCostBasis[i]!,
-                defensePaths[i]!,
-                defenseCostBasis[i]!,
-                dr,
-                taxRate,
-              );
-            if (recordPivot) rebalancedRecorded = true;
+            const rb = rebalanceBuckets(
+              riskPaths[i]!,
+              riskCostBasis[i]!,
+              defensePaths[i]!,
+              defenseCostBasis[i]!,
+              dr,
+              taxRate,
+            );
+            riskPaths[i] = rb.riskTotal;
+            riskCostBasis[i] = rb.riskPrincipal;
+            defensePaths[i] = rb.defenseTotal;
+            defenseCostBasis[i] = rb.defensePrincipal;
+            if (recordPivot) rebalanceInfoRecorded = rb.info;
           }
 
           if (recordPivot) {
@@ -425,7 +429,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               monthlyOtherIncome: otherIncomeRecorded,
               monthlyGainRisk: gainRisk,
               monthlyGainDefense: gainDefense,
-              rebalanced: rebalancedRecorded,
+              rebalanceInfo: rebalanceInfoRecorded,
             });
           }
         }
@@ -503,7 +507,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               monthlyOtherIncome: otherIncomeRecorded,
               monthlyGainRisk: gainRisk,
               monthlyGainDefense: 0,
-              rebalanced: false,
+              rebalanceInfo: null,
             });
           }
         }

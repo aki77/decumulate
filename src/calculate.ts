@@ -40,6 +40,21 @@ export interface YearlyProjection {
   yearlyOtherIncome: number;
 }
 
+export interface RebalanceInfo {
+  direction: "risk-to-defense" | "defense-to-risk";
+  sellAmount: number;
+  taxAmount: number;
+  proceeds: number;
+}
+
+export interface RebalanceResult {
+  riskTotal: number;
+  riskPrincipal: number;
+  defenseTotal: number;
+  defensePrincipal: number;
+  info: RebalanceInfo | null;
+}
+
 export interface MonthlyProjection {
   year: number;
   month: number;
@@ -54,7 +69,7 @@ export interface MonthlyProjection {
   monthlyGainDefense: number;
   monthlyGain: number;
   monthlyRate: number;
-  rebalanced: boolean;
+  rebalanceInfo: RebalanceInfo | null;
 }
 
 export interface CompoundResult {
@@ -63,7 +78,6 @@ export interface CompoundResult {
 }
 
 // 1バケットから amount を取り崩し、含み益按分課税分も合わせて控除する。
-// 戻り値: [新しい total, 新しい principal]
 export function withdrawFromBucket(
   total: number,
   principal: number,
@@ -133,25 +147,44 @@ export function rebalanceBuckets(
   defensePrincipal: number,
   defenseRatio: number,
   taxRate: number,
-): [number, number, number, number] {
+): RebalanceResult {
   const total = riskTotal + defenseTotal;
-  if (total <= 0) return [riskTotal, riskPrincipal, defenseTotal, defensePrincipal];
-  const delta = defenseRatio * total - defenseTotal;
-  if (delta === 0) return [riskTotal, riskPrincipal, defenseTotal, defensePrincipal];
-
+  const delta = total > 0 ? defenseRatio * total - defenseTotal : 0;
   const sellRisk = delta > 0;
   const srcTotal = sellRisk ? riskTotal : defenseTotal;
   const srcPrincipal = sellRisk ? riskPrincipal : defensePrincipal;
-  const sell = Math.min(Math.abs(delta), srcTotal);
-  if (sell <= 0) return [riskTotal, riskPrincipal, defenseTotal, defensePrincipal];
+  const sell = delta === 0 ? 0 : Math.min(Math.abs(delta), srcTotal);
+  if (sell <= 0) {
+    return { riskTotal, riskPrincipal, defenseTotal, defensePrincipal, info: null };
+  }
 
   const gainRatio = srcTotal > srcPrincipal ? (srcTotal - srcPrincipal) / srcTotal : 0;
-  const proceeds = sell - sell * gainRatio * taxRate;
+  const tax = sell * gainRatio * taxRate;
+  const proceeds = sell - tax;
   const [newSrcTotal, newSrcPrincipal] = withdrawFromBucket(srcTotal, srcPrincipal, sell, taxRate);
 
+  const info: RebalanceInfo = {
+    direction: sellRisk ? "risk-to-defense" : "defense-to-risk",
+    sellAmount: sell,
+    taxAmount: tax,
+    proceeds,
+  };
+
   return sellRisk
-    ? [newSrcTotal, newSrcPrincipal, defenseTotal + proceeds, defensePrincipal + proceeds]
-    : [riskTotal + proceeds, riskPrincipal + proceeds, newSrcTotal, newSrcPrincipal];
+    ? {
+        riskTotal: newSrcTotal,
+        riskPrincipal: newSrcPrincipal,
+        defenseTotal: defenseTotal + proceeds,
+        defensePrincipal: defensePrincipal + proceeds,
+        info,
+      }
+    : {
+        riskTotal: riskTotal + proceeds,
+        riskPrincipal: riskPrincipal + proceeds,
+        defenseTotal: newSrcTotal,
+        defensePrincipal: newSrcPrincipal,
+        info,
+      };
 }
 
 export function calculateCompound(params: CalculateParams): CompoundResult {
@@ -293,9 +326,9 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         yearlyOtherIncome += monthOtherIncome;
       }
 
-      let rebalanced = false;
+      let rebalanceInfo: RebalanceInfo | null = null;
       if (dr > 0 && needsRebalance(riskTotal, defenseTotal, dr, rebalanceThresholdPoint)) {
-        [riskTotal, riskPrincipal, defenseTotal, defensePrincipal] = rebalanceBuckets(
+        const rb = rebalanceBuckets(
           riskTotal,
           riskPrincipal,
           defenseTotal,
@@ -303,7 +336,11 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
           dr,
           taxRate,
         );
-        rebalanced = true;
+        riskTotal = rb.riskTotal;
+        riskPrincipal = rb.riskPrincipal;
+        defenseTotal = rb.defenseTotal;
+        defensePrincipal = rb.defensePrincipal;
+        rebalanceInfo = rb.info;
       }
 
       const prevTotal = prevRisk + prevDefense;
@@ -322,7 +359,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         monthlyGainDefense: Math.round(gainDefense),
         monthlyGain: Math.round(gainRisk + gainDefense),
         monthlyRate,
-        rebalanced,
+        rebalanceInfo,
       });
     }
 
