@@ -15,7 +15,6 @@ const SEED = 42;
 export interface MonteCarloParams extends CalculateParams {
   volatility: number;
   defenseVolatility: number;
-  defensePriorityOnDrawdown: boolean;
   drawdownThresholdPercent: number;
   skipRebalanceOnDrawdown: boolean;
 }
@@ -203,6 +202,8 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     raw: {
       year: number;
       month: number;
+      prevRisk: number;
+      prevDefense: number;
       riskTotal: number;
       defenseTotal: number;
       monthlyWithdrawal: number;
@@ -213,6 +214,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       rebalanced: boolean;
     },
   ): void => {
+    const prevTotal = raw.prevRisk + raw.prevDefense;
+    const monthlyRate =
+      prevTotal > 0 ? (raw.monthlyGainRisk + raw.monthlyGainDefense) / prevTotal : 0;
     const row: MonthlyProjection = {
       year: raw.year,
       month: raw.month,
@@ -226,6 +230,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       monthlyGainRisk: Math.round(raw.monthlyGainRisk),
       monthlyGainDefense: Math.round(raw.monthlyGainDefense),
       monthlyGain: Math.round(raw.monthlyGainRisk + raw.monthlyGainDefense),
+      monthlyRate,
       rebalanced: raw.rebalanced,
     };
     for (const k of keys) pivotMonthlies[k].push(row);
@@ -341,6 +346,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               if (inDrawdown && defensePaths[i]! > 0) {
                 fromDefense = Math.min(netWithdrawal, defensePaths[i]!);
                 fromRisk = netWithdrawal - fromDefense;
+              } else if (priorityOnDrawdown && riskPaths[i]! > 0) {
+                fromRisk = Math.min(netWithdrawal, riskPaths[i]!);
+                fromDefense = netWithdrawal - fromRisk;
               } else {
                 fromRisk = netWithdrawal * (riskPaths[i]! / total);
                 fromDefense = netWithdrawal * (defensePaths[i]! / total);
@@ -408,6 +416,8 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
             pushPivotRow(keysForMask(pivotMask), {
               year,
               month: m + 1,
+              prevRisk,
+              prevDefense,
               riskTotal: riskPaths[i]!,
               defenseTotal: defensePaths[i]!,
               monthlyWithdrawal: monthlyWithdrawalRecorded,
@@ -484,6 +494,8 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
             pushPivotRow(keysForMask(pivotMask), {
               year,
               month: m + 1,
+              prevRisk,
+              prevDefense: 0,
               riskTotal: riskPaths[i]!,
               defenseTotal: 0,
               monthlyWithdrawal: monthlyWithdrawalRecorded,

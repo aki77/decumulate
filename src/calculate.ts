@@ -25,6 +25,7 @@ export interface CalculateParams {
   defenseRatio: number;
   defenseAnnualReturnRate: number;
   rebalanceThresholdPoint: number;
+  defensePriorityOnDrawdown: boolean;
 }
 
 export interface YearlyProjection {
@@ -52,6 +53,7 @@ export interface MonthlyProjection {
   monthlyGainRisk: number;
   monthlyGainDefense: number;
   monthlyGain: number;
+  monthlyRate: number;
   rebalanced: boolean;
 }
 
@@ -96,6 +98,18 @@ export function splitProportional(
     fromDefense = defenseTotal;
   }
   return [Math.min(fromRisk, riskTotal), Math.min(fromDefense, defenseTotal)];
+}
+
+// リスク資産から優先取り崩し。リスクが足りない場合は不足分を防衛から補う。
+export function splitRiskFirst(
+  amount: number,
+  riskTotal: number,
+  defenseTotal: number,
+): [number, number] {
+  if (amount <= 0) return [0, 0];
+  const fromRisk = Math.min(amount, Math.max(riskTotal, 0));
+  const fromDefense = Math.min(amount - fromRisk, Math.max(defenseTotal, 0));
+  return [fromRisk, fromDefense];
 }
 
 // 月末時点の防衛資産比率が目標から thresholdPoint（pt）以上乖離していたらリバランス発動。
@@ -162,6 +176,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     defenseRatio,
     defenseAnnualReturnRate,
     rebalanceThresholdPoint,
+    defensePriorityOnDrawdown,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
@@ -261,7 +276,9 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         const income = monthPension + monthOtherIncome;
         const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
-        const [fromRisk, fromDefense] = splitProportional(netWithdrawal, riskTotal, defenseTotal);
+        const [fromRisk, fromDefense] = defensePriorityOnDrawdown
+          ? splitRiskFirst(netWithdrawal, riskTotal, defenseTotal)
+          : splitProportional(netWithdrawal, riskTotal, defenseTotal);
         [riskTotal, riskPrincipal] = withdrawFromBucket(riskTotal, riskPrincipal, fromRisk, taxRate);
         [defenseTotal, defensePrincipal] = withdrawFromBucket(
           defenseTotal,
@@ -289,6 +306,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         rebalanced = true;
       }
 
+      const prevTotal = prevRisk + prevDefense;
+      const monthlyRate = prevTotal > 0 ? (gainRisk + gainDefense) / prevTotal : 0;
       monthlyArr.push({
         year,
         month: m + 1,
@@ -302,6 +321,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         monthlyGainRisk: Math.round(gainRisk),
         monthlyGainDefense: Math.round(gainDefense),
         monthlyGain: Math.round(gainRisk + gainDefense),
+        monthlyRate,
         rebalanced,
       });
     }

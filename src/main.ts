@@ -498,6 +498,25 @@ function formatMonthlyGain(yen: number): string {
   return `${sign}${formatMan(yen)}`;
 }
 
+type RateBand = "pos-strong" | "pos" | "flat" | "neg" | "neg-strong";
+
+function classifyRateBand(rate: number, isAnnual: boolean): RateBand {
+  if (!Number.isFinite(rate)) return "flat";
+  const strong = isAnnual ? 0.18 : 0.015;
+  const weak = isAnnual ? 0.06 : 0.005;
+  if (rate >= strong) return "pos-strong";
+  if (rate >= weak) return "pos";
+  if (rate > -weak) return "flat";
+  if (rate > -strong) return "neg";
+  return "neg-strong";
+}
+
+function formatRate(rate: number): string {
+  if (!Number.isFinite(rate)) return "-";
+  const sign = rate > 0 ? "+" : "";
+  return `${sign}${(rate * 100).toFixed(2)}%`;
+}
+
 function renderMonthlyTable(monthly: MonthlyProjection[]): string {
   if (monthly.length === 0) return "";
   const byYear = new Map<number, MonthlyProjection[]>();
@@ -511,17 +530,23 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
     const age = rows[0]!.age;
     const yearLabel = age != null ? `${year}年目 / ${age}歳` : `${year}年目`;
     const yearlyGain = rows.reduce((s, r) => s + r.monthlyGain, 0);
+    const yearlyRate = rows.reduce((acc, r) => acc * (1 + r.monthlyRate), 1) - 1;
+    const yearBand = classifyRateBand(yearlyRate, true);
     parts.push(
-      `<details class="monthly-year"><summary>${yearLabel} <span class="year-summary">年合計運用損益 ${formatMonthlyGain(yearlyGain)}</span></summary>`,
+      `<details class="monthly-year"><summary>${yearLabel} ` +
+        `<span class="year-summary">年合計運用損益 ${formatMonthlyGain(yearlyGain)}</span> ` +
+        `<span class="year-summary year-rate" data-rate-band="${yearBand}">年率 ${formatRate(yearlyRate)}</span>` +
+        `</summary>`,
     );
     parts.push(
       `<table class="monthly-table"><thead><tr>` +
         `<th>月</th><th>リスク資産</th><th>防衛資産</th><th>合計</th>` +
         `<th>純引出</th><th>年金</th><th>他収入</th>` +
-        `<th>リスク損益</th><th>防衛損益</th><th>リバランス</th>` +
+        `<th>リスク損益</th><th>防衛損益</th><th>月率</th><th>リバランス</th>` +
         `</tr></thead><tbody>`,
     );
     for (const r of rows) {
+      const band = classifyRateBand(r.monthlyRate, false);
       parts.push(
         `<tr>` +
           `<td>${r.month}月</td>` +
@@ -533,6 +558,7 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
           `<td>${formatMan(r.monthlyOtherIncome)}</td>` +
           `<td class="${r.monthlyGainRisk < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainRisk)}</td>` +
           `<td class="${r.monthlyGainDefense < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainDefense)}</td>` +
+          `<td class="monthly-rate" data-rate-band="${band}">${formatRate(r.monthlyRate)}</td>` +
           `<td>${r.rebalanced ? "●" : ""}</td>` +
           `</tr>`,
       );
