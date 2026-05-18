@@ -557,10 +557,10 @@ function renderMonthlyDetails(
     ["p10", "モンテカルロ P10 パス（悲観側, 月次, 実質値）"],
   ];
   const mcSections = mcLabels
-    .map(([k, title]) => {
-      const open = k === "p50" ? " open" : "";
-      return `<details class="monthly-section"${open}><summary>${title}</summary>${renderMonthlyTable(mc.pivotMonthlies[k])}</details>`;
-    })
+    .map(
+      ([k, title]) =>
+        `<details class="monthly-section"><summary>${title}</summary>${renderMonthlyTable(mc.pivotMonthlies[k])}</details>`,
+    )
     .join("");
   host.innerHTML = detSection + mcSections;
 }
