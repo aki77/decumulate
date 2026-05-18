@@ -29,12 +29,12 @@
             <input id="currentAge" type="number" min="0" max="100" step="1" placeholder="例: 35" />
           </div>
           <div class="field">
-            <label for="initialAmount">初期投資額（円）</label>
-            <input id="initialAmount" type="number" min="0" step="10000" value="0" />
+            <label for="initialAmount">初期投資額（万円）</label>
+            <input id="initialAmount" type="number" min="0" step="1" value="0" />
           </div>
           <div class="field">
-            <label for="monthlyContribution">月額積立（円）</label>
-            <input id="monthlyContribution" type="number" min="0" step="1000" value="50000" />
+            <label for="monthlyContribution">月額積立（万円）</label>
+            <input id="monthlyContribution" type="number" min="0" step="1" value="5" />
           </div>
         </div>
 
@@ -113,13 +113,13 @@
             </select>
           </div>
           <div class="field" id="withdrawalAmountWrap">
-            <label for="fixedMonthlyWithdrawal">月額生活費（円）</label>
+            <label for="fixedMonthlyWithdrawal">月額生活費（万円）</label>
             <input
               id="fixedMonthlyWithdrawal"
               type="number"
               min="0"
-              step="10000"
-              value="250000"
+              step="1"
+              value="25"
             />
           </div>
           <div class="field hidden" id="withdrawalRateWrap">
@@ -135,12 +135,12 @@
         <div class="field-group">
           <h3>年金・その他収入</h3>
           <div class="field">
-            <label for="basePension">年金月額（65歳基準, 額面, 円）</label>
-            <input id="basePension" type="number" min="0" step="10000" value="0" />
+            <label for="basePension">年金月額（65歳基準, 額面, 万円）</label>
+            <input id="basePension" type="number" min="0" step="1" value="0" />
             <div class="preset-buttons">
               <button type="button" id="pensionZero">なし</button>
-              <button type="button" id="pensionSingle">独身 (¥146,000)</button>
-              <button type="button" id="pensionCouple">夫婦 (¥292,000)</button>
+              <button type="button" id="pensionSingle">独身 (15万円)</button>
+              <button type="button" id="pensionCouple">夫婦 (29万円)</button>
             </div>
           </div>
           <div class="field">
@@ -148,8 +148,8 @@
             <input id="pensionStartAge" type="number" min="60" max="75" step="1" value="65" />
           </div>
           <div class="field">
-            <label for="monthlyOtherIncome">その他の月収（手取り, 円）</label>
-            <input id="monthlyOtherIncome" type="number" min="0" step="10000" value="0" />
+            <label for="monthlyOtherIncome">その他の月収（手取り, 万円）</label>
+            <input id="monthlyOtherIncome" type="number" min="0" step="1" value="0" />
           </div>
         </div>
       </section>

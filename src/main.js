@@ -10,6 +10,8 @@ const PRESETS = {
   topix: { annualReturnRate: 6, expenseRatio: 0.143, volatility: 18 },
 };
 
+const MAN = 10000;
+
 function readNumber(id, fallback = 0) {
   const el = document.getElementById(id);
   if (!el) return fallback;
@@ -17,6 +19,10 @@ function readNumber(id, fallback = 0) {
   if (raw === "" || raw === null) return fallback;
   const n = Number(raw);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function readMan(id, fallbackMan = 0) {
+  return readNumber(id, fallbackMan) * MAN;
 }
 
 function readChecked(id) {
@@ -31,11 +37,10 @@ function readSelect(id) {
 
 function readParams() {
   const currentAgeRaw = document.getElementById("currentAge").value;
-  const basePension = readNumber("basePension", 0);
   return {
     currentAge: currentAgeRaw === "" ? null : Number(currentAgeRaw),
-    initialAmount: readNumber("initialAmount", 0),
-    monthlyContribution: readNumber("monthlyContribution", 0),
+    initialAmount: readMan("initialAmount", 0),
+    monthlyContribution: readMan("monthlyContribution", 5),
     annualReturnRate: readNumber("annualReturnRate", 5),
     expenseRatio: readNumber("expenseRatio", 0.1),
     inflationRate: readNumber("inflationRate", 2),
@@ -44,30 +49,26 @@ function readParams() {
     withdrawalStartYear: readNumber("withdrawalStartYear", 30),
     withdrawalYears: readNumber("withdrawalYears", 30),
     withdrawalMode: readSelect("withdrawalMode") || "amount",
-    fixedMonthlyWithdrawal: readNumber("fixedMonthlyWithdrawal", 250000),
+    fixedMonthlyWithdrawal: readMan("fixedMonthlyWithdrawal", 25),
     withdrawalRate: readNumber("withdrawalRate", 4),
     inflationAdjustedWithdrawal: readChecked("inflationAdjustedWithdrawal"),
     taxFree: readChecked("taxFree"),
-    basePension,
+    basePension: readMan("basePension", 0),
     pensionStartAge: readNumber("pensionStartAge", 65),
-    monthlyOtherIncome: readNumber("monthlyOtherIncome", 0),
+    monthlyOtherIncome: readMan("monthlyOtherIncome", 0),
   };
 }
 
-const yenFormatter = new Intl.NumberFormat("ja-JP", {
-  style: "currency",
-  currency: "JPY",
-  maximumFractionDigits: 0,
-});
+const toMan = (v) => v / MAN;
 
-function formatYen(v) {
-  if (!Number.isFinite(v)) return "-";
-  return yenFormatter.format(Math.round(v));
+function formatManValue(manValue) {
+  if (!Number.isFinite(manValue)) return "-";
+  return `${Math.round(manValue).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}万円`;
 }
 
-function formatMan(v) {
-  if (!Number.isFinite(v)) return "-";
-  return `${(Math.round(v) / 10000).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}万円`;
+function formatMan(yen) {
+  if (!Number.isFinite(yen)) return "-";
+  return formatManValue(toMan(yen));
 }
 
 function formatPercent(v) {
@@ -81,9 +82,9 @@ let mcChart = null;
 function renderCompoundChart(projections, params) {
   const ctx = document.getElementById("compoundChart").getContext("2d");
   const labels = projections.map((p) => (p.age != null ? `${p.age}歳` : `${p.year}年`));
-  const principal = projections.map((p) => p.principal / 10000);
-  const interest = projections.map((p) => p.interest / 10000);
-  const tax = projections.map((p) => p.tax / 10000);
+  const principal = projections.map((p) => toMan(p.principal));
+  const interest = projections.map((p) => toMan(p.interest));
+  const tax = projections.map((p) => toMan(p.tax));
 
   const annotations = {};
   if (params.contributionYears > 0 && params.contributionYears <= projections.length - 1) {
@@ -169,7 +170,7 @@ function renderCompoundChart(projections, params) {
         legend: { position: "bottom" },
         tooltip: {
           callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${formatMan(ctx.parsed.y * 10000)}`,
+            label: (ctx) => `${ctx.dataset.label}: ${formatManValue(ctx.parsed.y)}`,
           },
         },
         annotation: { annotations },
@@ -185,7 +186,6 @@ function renderCompoundChart(projections, params) {
 function renderMonteCarloChart(mc, params) {
   const ctx = document.getElementById("mcChart").getContext("2d");
   const labels = mc.yearly.map((y) => (y.age != null ? `${y.age}歳` : `${y.year}年`));
-  const toMan = (v) => v / 10000;
 
   const p10 = mc.yearly.map((y) => toMan(y.p10));
   const p25 = mc.yearly.map((y) => toMan(y.p25 - y.p10));
@@ -275,7 +275,7 @@ function renderMonteCarloChart(mc, params) {
         legend: { position: "bottom" },
         tooltip: {
           callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${formatMan(ctx.parsed.y * 10000)}`,
+            label: (ctx) => `${ctx.dataset.label}: ${formatManValue(ctx.parsed.y)}`,
           },
         },
       },
@@ -307,14 +307,14 @@ function renderSummary(projections, mc, params) {
       <div class="score-desc">安心度スコア（0–100）</div>
     </div>
     <div class="metric-grid">
-      <div class="metric"><div class="metric-label">積立元本合計</div><div class="metric-value">${formatYen(totalContrib)}</div></div>
-      <div class="metric"><div class="metric-label">最終総資産（名目）</div><div class="metric-value">${formatYen(last.total)}</div></div>
-      <div class="metric"><div class="metric-label">運用益（税引後）</div><div class="metric-value">${formatYen(last.interest)}</div></div>
-      <div class="metric"><div class="metric-label">想定税金</div><div class="metric-value">${formatYen(last.tax)}</div></div>
-      <div class="metric"><div class="metric-label">総引出額（名目）</div><div class="metric-value">${formatYen(totalWithdrawn)}</div></div>
-      <div class="metric"><div class="metric-label">MC 中央値残高（実質）</div><div class="metric-value">${formatYen(mc.finalP50)}</div></div>
-      <div class="metric"><div class="metric-label">MC 悲観値 p10（実質）</div><div class="metric-value">${formatYen(mc.finalP10)}</div></div>
-      <div class="metric"><div class="metric-label">MC 楽観値 p90（実質）</div><div class="metric-value">${formatYen(mc.finalP90)}</div></div>
+      <div class="metric"><div class="metric-label">積立元本合計</div><div class="metric-value">${formatMan(totalContrib)}</div></div>
+      <div class="metric"><div class="metric-label">最終総資産（名目）</div><div class="metric-value">${formatMan(last.total)}</div></div>
+      <div class="metric"><div class="metric-label">運用益（税引後）</div><div class="metric-value">${formatMan(last.interest)}</div></div>
+      <div class="metric"><div class="metric-label">想定税金</div><div class="metric-value">${formatMan(last.tax)}</div></div>
+      <div class="metric"><div class="metric-label">総引出額（名目）</div><div class="metric-value">${formatMan(totalWithdrawn)}</div></div>
+      <div class="metric"><div class="metric-label">MC 中央値残高（実質）</div><div class="metric-value">${formatMan(mc.finalP50)}</div></div>
+      <div class="metric"><div class="metric-label">MC 悲観値 p10（実質）</div><div class="metric-value">${formatMan(mc.finalP10)}</div></div>
+      <div class="metric"><div class="metric-label">MC 楽観値 p90（実質）</div><div class="metric-value">${formatMan(mc.finalP90)}</div></div>
       <div class="metric"><div class="metric-label">枯渇確率</div><div class="metric-value">${formatPercent(mc.depletionProbability)}</div></div>
       <div class="metric"><div class="metric-label">元本割れ確率</div><div class="metric-value">${formatPercent(mc.failureProbability)}</div></div>
     </div>
@@ -359,11 +359,11 @@ function setupWithdrawalModeToggle() {
 
 function setupPensionPreset() {
   document.getElementById("pensionSingle").addEventListener("click", () => {
-    document.getElementById("basePension").value = 146000;
+    document.getElementById("basePension").value = 15;
     scheduleUpdate();
   });
   document.getElementById("pensionCouple").addEventListener("click", () => {
-    document.getElementById("basePension").value = 292000;
+    document.getElementById("basePension").value = 29;
     scheduleUpdate();
   });
   document.getElementById("pensionZero").addEventListener("click", () => {
