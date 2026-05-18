@@ -33,6 +33,43 @@ export function splitProportional(amount, riskTotal, defenseTotal) {
   return [Math.min(fromRisk, riskTotal), Math.min(fromDefense, defenseTotal)];
 }
 
+// 月末時点の防衛資産比率が目標から thresholdPoint（pt）以上乖離していたらリバランス発動。
+export function needsRebalance(riskTotal, defenseTotal, defenseRatio, thresholdPoint) {
+  const total = riskTotal + defenseTotal;
+  if (total <= 0) return false;
+  const currentRatio = defenseTotal / total;
+  return Math.abs(currentRatio - defenseRatio) * 100 > thresholdPoint;
+}
+
+// 売却側のみ含み益按分課税。税引後の手取りを買付側に加算して目標比率に近づける。
+export function rebalanceBuckets(
+  riskTotal,
+  riskPrincipal,
+  defenseTotal,
+  defensePrincipal,
+  defenseRatio,
+  taxRate,
+) {
+  const total = riskTotal + defenseTotal;
+  if (total <= 0) return [riskTotal, riskPrincipal, defenseTotal, defensePrincipal];
+  const delta = defenseRatio * total - defenseTotal;
+  if (delta === 0) return [riskTotal, riskPrincipal, defenseTotal, defensePrincipal];
+
+  const sellRisk = delta > 0;
+  const srcTotal = sellRisk ? riskTotal : defenseTotal;
+  const srcPrincipal = sellRisk ? riskPrincipal : defensePrincipal;
+  const sell = Math.min(Math.abs(delta), srcTotal);
+  if (sell <= 0) return [riskTotal, riskPrincipal, defenseTotal, defensePrincipal];
+
+  const gainRatio = srcTotal > srcPrincipal ? (srcTotal - srcPrincipal) / srcTotal : 0;
+  const proceeds = sell - sell * gainRatio * taxRate;
+  const [newSrcTotal, newSrcPrincipal] = withdrawFromBucket(srcTotal, srcPrincipal, sell, taxRate);
+
+  return sellRisk
+    ? [newSrcTotal, newSrcPrincipal, defenseTotal + proceeds, defensePrincipal + proceeds]
+    : [riskTotal + proceeds, riskPrincipal + proceeds, newSrcTotal, newSrcPrincipal];
+}
+
 export function calculateCompound(params) {
   const {
     initialAmount,
@@ -54,6 +91,7 @@ export function calculateCompound(params) {
     monthlyOtherIncome,
     defenseRatio,
     defenseAnnualReturnRate,
+    rebalanceThresholdPoint,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
@@ -150,6 +188,17 @@ export function calculateCompound(params) {
         yearlyWithdrawal += fromRisk + fromDefense;
         yearlyPension += monthPension;
         yearlyOtherIncome += monthlyOtherIncome;
+      }
+
+      if (dr > 0 && needsRebalance(riskTotal, defenseTotal, dr, rebalanceThresholdPoint)) {
+        [riskTotal, riskPrincipal, defenseTotal, defensePrincipal] = rebalanceBuckets(
+          riskTotal,
+          riskPrincipal,
+          defenseTotal,
+          defensePrincipal,
+          dr,
+          taxRate,
+        );
       }
     }
 

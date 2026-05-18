@@ -136,6 +136,18 @@
             </label>
             <input id="drawdownThresholdPercent" type="number" min="0" max="50" step="1" value="10" />
           </div>
+          <div class="field" id="rebalanceThresholdWrap">
+            <label for="rebalanceThresholdPoint">
+              リバランス乖離閾値（pt）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">月末の防衛資産比率が目標から何ポイント乖離したらリバランス（売買による比率調整）を行うか。例: 目標30%・閾値5pt なら 25%未満または35%超で発動。0 にすると毎月リバランス。防衛資産配分が 0% のときは無効。課税口座では売却益に課税される点に注意。</span></span>
+            </label>
+            <input id="rebalanceThresholdPoint" type="number" min="0" max="50" step="1" value="5" />
+          </div>
+          <div class="field checkbox-field" id="skipRebalanceOnDrawdownWrap">
+            <input id="skipRebalanceOnDrawdown" type="checkbox" checked />
+            <label for="skipRebalanceOnDrawdown">下落判定中はリバランスを行わない</label>
+            <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">「下落時は防衛資産から優先的に取り崩す」が ON のとき、下落判定中の月はリバランスをスキップする。OFF にすると下落中もリバランスを実行し、防衛資産を売ってリスク資産を買い戻す（逆張り的）。デフォルトは ON。</span></span>
+          </div>
         </div>
 
         <div class="field-group">

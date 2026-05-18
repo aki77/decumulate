@@ -46,6 +46,8 @@ const PERSIST_IDS = [
   "defenseVolatility",
   "defensePriorityOnDrawdown",
   "drawdownThresholdPercent",
+  "rebalanceThresholdPoint",
+  "skipRebalanceOnDrawdown",
 ];
 
 const HELP = {
@@ -115,6 +117,8 @@ function readParams() {
     defenseVolatility: readNumber("defenseVolatility", 0),
     defensePriorityOnDrawdown: readChecked("defensePriorityOnDrawdown"),
     drawdownThresholdPercent: readNumber("drawdownThresholdPercent", 10),
+    rebalanceThresholdPoint: readNumber("rebalanceThresholdPoint", 5),
+    skipRebalanceOnDrawdown: readChecked("skipRebalanceOnDrawdown"),
   };
 }
 
@@ -534,12 +538,14 @@ function setupDefensePreset() {
 
 function syncDefenseUI() {
   const checkbox = document.getElementById("defensePriorityOnDrawdown");
-  const wrap = document.getElementById("drawdownThresholdWrap");
-  if (!checkbox || !wrap) return;
-  if (checkbox.checked) {
-    wrap.classList.remove("hidden");
-  } else {
-    wrap.classList.add("hidden");
+  if (!checkbox) return;
+  const wraps = [
+    document.getElementById("drawdownThresholdWrap"),
+    document.getElementById("skipRebalanceOnDrawdownWrap"),
+  ];
+  for (const wrap of wraps) {
+    if (!wrap) continue;
+    wrap.classList.toggle("hidden", !checkbox.checked);
   }
 }
 

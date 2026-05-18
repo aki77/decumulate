@@ -1,7 +1,7 @@
 // モンテカルロ・シミュレーション（GBM、5000パス）
 // 実質値（インフレ控除後）で計算。再現性のため Mulberry32 + Box-Muller を使用。
 import { adjustedMonthlyPension } from "./pension.js";
-import { TAX_RATE } from "./calculate.js";
+import { TAX_RATE, needsRebalance, rebalanceBuckets } from "./calculate.js";
 
 const NUM_SIMULATIONS = 5000;
 const SEED = 42;
@@ -50,6 +50,8 @@ export function simulateMonteCarlo(params) {
     defenseVolatility,
     defensePriorityOnDrawdown,
     drawdownThresholdPercent,
+    rebalanceThresholdPoint,
+    skipRebalanceOnDrawdown,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
@@ -73,6 +75,7 @@ export function simulateMonteCarlo(params) {
 
   const drawdownThreshold = Math.max(0, drawdownThresholdPercent || 0) / 100;
   const priorityOnDrawdown = !!defensePriorityOnDrawdown && useDefense;
+  const skipRebalanceWhenDrawdown = !!skipRebalanceOnDrawdown;
 
   const monthlyPension = basePension > 0 ? adjustedMonthlyPension(basePension, pensionStartAge) : 0;
   const pensionStartYearOffset =
@@ -126,6 +129,7 @@ export function simulateMonteCarlo(params) {
     const isWithdrawing =
       year > withdrawalStartYear && year <= withdrawalStartYear + withdrawalYears;
     const isFirstWithdrawalYear = year === withdrawalStartYear + 1;
+    const checkDrawdown = priorityOnDrawdown && (isWithdrawing || skipRebalanceWhenDrawdown);
     const pensionActive =
       pensionStartYearOffset != null && year >= pensionStartYearOffset && monthlyPension > 0;
     const monthPension = pensionActive ? monthlyPension : 0;
@@ -167,6 +171,10 @@ export function simulateMonteCarlo(params) {
           }
 
           const total = riskPaths[i] + defensePaths[i];
+          const inDrawdown =
+            checkDrawdown &&
+            riskHWM[i] > 0 &&
+            1 - riskPaths[i] / riskHWM[i] >= drawdownThreshold;
 
           if (isWithdrawing && total > 0) {
             let baseWithdrawal;
@@ -186,10 +194,6 @@ export function simulateMonteCarlo(params) {
             if (netWithdrawal > 0) {
               let fromRisk;
               let fromDefense;
-              const inDrawdown =
-                priorityOnDrawdown &&
-                riskHWM[i] > 0 &&
-                1 - riskPaths[i] / riskHWM[i] >= drawdownThreshold;
               if (inDrawdown && defensePaths[i] > 0) {
                 fromDefense = Math.min(netWithdrawal, defensePaths[i]);
                 fromRisk = netWithdrawal - fromDefense;
@@ -236,6 +240,22 @@ export function simulateMonteCarlo(params) {
               cumulativeWithdrawals[i] += drawnTotal;
               yearlyWithdrawals[i] += drawnTotal;
             }
+          }
+
+          const shouldSkipRebalance = skipRebalanceWhenDrawdown && inDrawdown;
+          if (
+            !shouldSkipRebalance &&
+            needsRebalance(riskPaths[i], defensePaths[i], dr, rebalanceThresholdPoint)
+          ) {
+            [riskPaths[i], riskCostBasis[i], defensePaths[i], defenseCostBasis[i]] =
+              rebalanceBuckets(
+                riskPaths[i],
+                riskCostBasis[i],
+                defensePaths[i],
+                defenseCostBasis[i],
+                dr,
+                taxRate,
+              );
           }
         }
       } else {
