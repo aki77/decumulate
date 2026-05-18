@@ -12,6 +12,24 @@ const PRESETS = {
 
 const MAN = 10000;
 
+const HELP = {
+  score: "枯渇確率・元本割れ確率・中央値残高から算出した 0–100 の総合指標。高いほど安心。",
+  totalContrib: "初期投資額 + 月額積立 × 12 × 積立年数。自身が拠出した元本の合計。",
+  finalTotal: "シミュレーション最終年の名目資産（インフレ調整なし）。",
+  interest: "最終時点の元本超過分（運用益）。非課税口座でない場合は税金控除済み。",
+  tax: "特定口座を想定した含み益への課税（20.315%）の累計概算。",
+  totalWithdrawn: "取り崩し期間中に引き出した金額の合計（名目値）。",
+  mcP50: "モンテカルロ 5,000 試行の最終資産分布の中央値。インフレ控除後の購買力ベース。",
+  mcP10: "最終資産分布の下位 10% タイル。下振れシナリオの目安。",
+  mcP90: "最終資産分布の上位 10% タイル。上振れシナリオの目安。",
+  depletion: "取り崩し期間中に資産がゼロになる試行の割合。",
+  failure: "最終資産が積立元本合計を下回る試行の割合。",
+};
+
+function helpIcon(text) {
+  return `<span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">${text}</span></span>`;
+}
+
 function readNumber(id, fallback = 0) {
   const el = document.getElementById(id);
   if (!el) return fallback;
@@ -304,19 +322,19 @@ function renderSummary(projections, mc, params) {
     <div class="score-card ${scoreInfo.className}">
       <div class="score-value">${score}</div>
       <div class="score-label">${scoreInfo.label}</div>
-      <div class="score-desc">安心度スコア（0–100）</div>
+      <div class="score-desc">安心度スコア（0–100）${helpIcon(HELP.score)}</div>
     </div>
     <div class="metric-grid">
-      <div class="metric"><div class="metric-label">積立元本合計</div><div class="metric-value">${formatMan(totalContrib)}</div></div>
-      <div class="metric"><div class="metric-label">最終総資産（名目）</div><div class="metric-value">${formatMan(last.total)}</div></div>
-      <div class="metric"><div class="metric-label">運用益（税引後）</div><div class="metric-value">${formatMan(last.interest)}</div></div>
-      <div class="metric"><div class="metric-label">想定税金</div><div class="metric-value">${formatMan(last.tax)}</div></div>
-      <div class="metric"><div class="metric-label">総引出額（名目）</div><div class="metric-value">${formatMan(totalWithdrawn)}</div></div>
-      <div class="metric"><div class="metric-label">MC 中央値残高（実質）</div><div class="metric-value">${formatMan(mc.finalP50)}</div></div>
-      <div class="metric"><div class="metric-label">MC 悲観値 p10（実質）</div><div class="metric-value">${formatMan(mc.finalP10)}</div></div>
-      <div class="metric"><div class="metric-label">MC 楽観値 p90（実質）</div><div class="metric-value">${formatMan(mc.finalP90)}</div></div>
-      <div class="metric"><div class="metric-label">枯渇確率</div><div class="metric-value">${formatPercent(mc.depletionProbability)}</div></div>
-      <div class="metric"><div class="metric-label">元本割れ確率</div><div class="metric-value">${formatPercent(mc.failureProbability)}</div></div>
+      <div class="metric"><div class="metric-label">積立元本合計${helpIcon(HELP.totalContrib)}</div><div class="metric-value">${formatMan(totalContrib)}</div></div>
+      <div class="metric"><div class="metric-label">最終総資産（名目）${helpIcon(HELP.finalTotal)}</div><div class="metric-value">${formatMan(last.total)}</div></div>
+      <div class="metric"><div class="metric-label">運用益（税引後）${helpIcon(HELP.interest)}</div><div class="metric-value">${formatMan(last.interest)}</div></div>
+      <div class="metric"><div class="metric-label">想定税金${helpIcon(HELP.tax)}</div><div class="metric-value">${formatMan(last.tax)}</div></div>
+      <div class="metric"><div class="metric-label">総引出額（名目）${helpIcon(HELP.totalWithdrawn)}</div><div class="metric-value">${formatMan(totalWithdrawn)}</div></div>
+      <div class="metric"><div class="metric-label">MC 中央値残高（実質）${helpIcon(HELP.mcP50)}</div><div class="metric-value">${formatMan(mc.finalP50)}</div></div>
+      <div class="metric"><div class="metric-label">MC 悲観値 p10（実質）${helpIcon(HELP.mcP10)}</div><div class="metric-value">${formatMan(mc.finalP10)}</div></div>
+      <div class="metric"><div class="metric-label">MC 楽観値 p90（実質）${helpIcon(HELP.mcP90)}</div><div class="metric-value">${formatMan(mc.finalP90)}</div></div>
+      <div class="metric"><div class="metric-label">枯渇確率${helpIcon(HELP.depletion)}</div><div class="metric-value">${formatPercent(mc.depletionProbability)}</div></div>
+      <div class="metric"><div class="metric-label">元本割れ確率${helpIcon(HELP.failure)}</div><div class="metric-value">${formatPercent(mc.failureProbability)}</div></div>
     </div>
   `;
 }

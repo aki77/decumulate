@@ -52,7 +52,10 @@
             </select>
           </div>
           <div class="field">
-            <label for="annualReturnRate">想定利回り（%/年）</label>
+            <label for="annualReturnRate">
+              想定利回り（%/年）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">年あたりの期待リターン。インデックス投信なら過去実績ベースで 5〜10% 程度が目安。</span></span>
+            </label>
             <input
               id="annualReturnRate"
               type="number"
@@ -63,20 +66,30 @@
             />
           </div>
           <div class="field">
-            <label for="expenseRatio">信託報酬（%/年）</label>
+            <label for="expenseRatio">
+              信託報酬（%/年）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">投資信託を保有している間、毎年資産から差し引かれる運用コスト。</span></span>
+            </label>
             <input id="expenseRatio" type="number" min="0" max="3" step="0.01" value="0.1" />
           </div>
           <div class="field">
-            <label for="volatility">ボラティリティ（%/年）</label>
+            <label for="volatility">
+              ボラティリティ（%/年）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">リターンのブレ幅（年率標準偏差）。値が大きいほど短期の値動きが激しく、モンテカルロのバラツキが大きくなる。</span></span>
+            </label>
             <input id="volatility" type="number" min="5" max="30" step="1" value="15" />
           </div>
           <div class="field">
-            <label for="inflationRate">インフレ率（%/年）</label>
+            <label for="inflationRate">
+              インフレ率（%/年）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">物価上昇率。実質値（購買力）を計算する際に名目値から差し引く。</span></span>
+            </label>
             <input id="inflationRate" type="number" min="0" max="10" step="0.1" value="2" />
           </div>
           <div class="field checkbox-field">
             <input id="taxFree" type="checkbox" />
             <label for="taxFree">NISA 等の非課税口座として計算する</label>
+            <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">ONにすると運用益と取り崩し時に税金（20.315%）が課されない計算になる。</span></span>
           </div>
         </div>
 
@@ -106,7 +119,10 @@
         <div class="field-group">
           <h3>取り崩し</h3>
           <div class="field">
-            <label for="withdrawalMode">取り崩しモード</label>
+            <label for="withdrawalMode">
+              取り崩しモード
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">「月額」は毎月一定額を引き出す方式。「年率」は Trinity Study に基づき初年度資産にかかる%を毎年インフレ調整して引き出す方式。</span></span>
+            </label>
             <select id="withdrawalMode">
               <option value="amount">月額で指定</option>
               <option value="rate">年率（%）で指定（Trinity Study）</option>
@@ -123,19 +139,26 @@
             />
           </div>
           <div class="field hidden" id="withdrawalRateWrap">
-            <label for="withdrawalRate">年間引出率（%）</label>
+            <label for="withdrawalRate">
+              年間引出率（%）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">取り崩し開始時の資産に対する年あたりの引出割合。Trinity Study では 4% が成功率の高い水準とされる。</span></span>
+            </label>
             <input id="withdrawalRate" type="number" min="0" max="20" step="0.1" value="4" />
           </div>
           <div class="field checkbox-field" id="inflationAdjustedWithdrawalWrap">
             <input id="inflationAdjustedWithdrawal" type="checkbox" />
             <label for="inflationAdjustedWithdrawal">月額をインフレに連動させる</label>
+            <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">インフレ率の分だけ毎年引出額を増やし、実質購買力を維持する。</span></span>
           </div>
         </div>
 
         <div class="field-group">
           <h3>年金・その他収入</h3>
           <div class="field">
-            <label for="basePension">年金月額（65歳基準, 額面, 万円）</label>
+            <label for="basePension">
+              年金月額（65歳基準, 額面, 万円）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">65歳開始時の額面（税・社会保険控除前）月額。受給開始年齢を変えると繰上げ/繰下げで自動調整される。</span></span>
+            </label>
             <input id="basePension" type="number" min="0" step="1" value="0" />
             <div class="preset-buttons">
               <button type="button" id="pensionZero">なし</button>
@@ -144,7 +167,10 @@
             </div>
           </div>
           <div class="field">
-            <label for="pensionStartAge">受給開始年齢（60–75）</label>
+            <label for="pensionStartAge">
+              受給開始年齢（60–75）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">繰上げ：60〜64歳は1ヶ月あたり-0.4%。繰下げ：66〜75歳は1ヶ月あたり+0.7% で年金月額が調整される。</span></span>
+            </label>
             <input id="pensionStartAge" type="number" min="60" max="75" step="1" value="65" />
           </div>
           <div class="field">
