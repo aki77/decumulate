@@ -178,11 +178,12 @@
           <div class="field">
             <label for="withdrawalMode">
               取り崩しモード
-              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">「月額」は毎月一定額を引き出す方式。「年率」は Trinity Study に基づき初年度資産にかかる%を毎年インフレ調整して引き出す方式。</span></span>
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">「月額」は毎月一定額を引き出す方式。「年率（Trinity Study）」は初年度資産にかかる%を毎年インフレ調整。「年率×リスク資産」は毎年初にその時点のリスク資産に率をかけて月額を再計算（資産変動に追従、インフレ調整なし）。</span></span>
             </label>
             <select id="withdrawalMode">
               <option value="amount">月額で指定</option>
               <option value="rate">年率（%）で指定（Trinity Study）</option>
+              <option value="rate-risk">年率（%）×リスク資産で毎年再評価</option>
             </select>
           </div>
           <div class="field" id="withdrawalAmountWrap">
@@ -198,7 +199,7 @@
           <div class="field hidden" id="withdrawalRateWrap">
             <label for="withdrawalRate">
               年間引出率（%）
-              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">取り崩し開始時の資産に対する年あたりの引出割合。Trinity Study では 4% が成功率の高い水準とされる。</span></span>
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">年あたりの引出割合。Trinity Study モードでは取り崩し開始時の総資産に対する率（4%が目安）。リスク資産モードでは毎年初時点のリスク資産に対する率。</span></span>
             </label>
             <input id="withdrawalRate" type="number" min="0" max="20" step="0.1" value="4" />
           </div>

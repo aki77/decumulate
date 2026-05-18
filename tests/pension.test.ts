@@ -4,7 +4,7 @@ import {
   PENSION_NET_RATE,
   pensionMultiplier,
   adjustedMonthlyPension,
-} from "../src/pension.js";
+} from "../src/pension.ts";
 
 test("pensionMultiplier - 65歳は1.0", () => {
   assert.strictEqual(pensionMultiplier(65), 1.0);

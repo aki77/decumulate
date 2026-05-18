@@ -5,7 +5,7 @@ import {
   computeSecurityScore,
   scoreLabel,
   type MonteCarloParams,
-} from "../src/monte-carlo.js";
+} from "../src/monte-carlo.ts";
 
 const BASE_PARAMS: MonteCarloParams = {
   initialAmount: 1000000,
@@ -178,4 +178,49 @@ test("simulateMonteCarlo - 取り崩しゼロなら枯渇しない", () => {
   };
   const result = simulateMonteCarlo(params);
   assert.strictEqual(result.depletionProbability, 0);
+});
+
+// --- simulateMonteCarlo: rate-risk モード ---
+
+test("simulateMonteCarlo (rate-risk) - 単一バケットで完走しNaNが出ない", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    withdrawalMode: "rate-risk",
+    withdrawalRate: 4,
+    defenseRatio: 0,
+  };
+  const result = simulateMonteCarlo(params);
+  for (const y of result.yearly) {
+    assert.ok(Number.isFinite(y.p50), `year ${y.year}: p50 not finite`);
+    assert.ok(Number.isFinite(y.medianYearlyWithdrawal));
+    assert.ok(y.depletionRate >= 0 && y.depletionRate <= 1);
+  }
+});
+
+test("simulateMonteCarlo (rate-risk) - 2バケットで完走しNaNが出ない", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    withdrawalMode: "rate-risk",
+    withdrawalRate: 4,
+    defenseRatio: 30,
+    defenseAnnualReturnRate: 0.5,
+    defenseVolatility: 1,
+  };
+  const result = simulateMonteCarlo(params);
+  for (const y of result.yearly) {
+    assert.ok(Number.isFinite(y.p50));
+    assert.ok(Number.isFinite(y.medianYearlyWithdrawal));
+  }
+});
+
+test("simulateMonteCarlo (rate-risk) - シード固定で再現性あり", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    withdrawalMode: "rate-risk",
+    withdrawalRate: 4,
+  };
+  const r1 = simulateMonteCarlo(params);
+  const r2 = simulateMonteCarlo(params);
+  assert.strictEqual(r1.finalP50, r2.finalP50);
+  assert.strictEqual(r1.depletionProbability, r2.depletionProbability);
 });

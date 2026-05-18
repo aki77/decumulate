@@ -1,10 +1,10 @@
-import { calculateCompound, type CalculateParams } from "./calculate.js";
+import { calculateCompound, type CalculateParams } from "./calculate.ts";
 import {
   simulateMonteCarlo,
   computeSecurityScore,
   scoreLabel,
   type MonteCarloParams,
-} from "./monte-carlo.js";
+} from "./monte-carlo.ts";
 
 interface Preset {
   annualReturnRate: number;
@@ -121,7 +121,10 @@ function readParams(): MonteCarloParams {
     contributionYears: readNumber("contributionYears", 30),
     withdrawalStartYear: readNumber("withdrawalStartYear", 30),
     withdrawalYears: readNumber("withdrawalYears", 30),
-    withdrawalMode: (readSelect("withdrawalMode") || "amount") as "amount" | "rate",
+    withdrawalMode: (readSelect("withdrawalMode") || "amount") as
+      | "amount"
+      | "rate"
+      | "rate-risk",
     fixedMonthlyWithdrawal: readMan("fixedMonthlyWithdrawal", 25),
     withdrawalRate: readNumber("withdrawalRate", 4),
     inflationAdjustedWithdrawal: readChecked("inflationAdjustedWithdrawal"),
@@ -505,10 +508,11 @@ function syncWithdrawalModeUI(): void {
   const amountWrap = document.getElementById("withdrawalAmountWrap")!;
   const rateWrap = document.getElementById("withdrawalRateWrap")!;
   const inflationToggleWrap = document.getElementById("inflationAdjustedWithdrawalWrap")!;
-  if (select.value === "rate") {
+  const mode = select.value;
+  if (mode === "rate" || mode === "rate-risk") {
     amountWrap.classList.add("hidden");
     rateWrap.classList.remove("hidden");
-    // 率モードでは Trinity Study 準拠で毎年自動的にインフレ調整するので非表示
+    // 率モードはインフレ調整トグル不要
     inflationToggleWrap.classList.add("hidden");
   } else {
     amountWrap.classList.remove("hidden");

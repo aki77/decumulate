@@ -8,7 +8,7 @@ import {
   rebalanceBuckets,
   calculateCompound,
   type CalculateParams,
-} from "../src/calculate.js";
+} from "../src/calculate.ts";
 
 const BASE_PARAMS: CalculateParams = {
   initialAmount: 1000000,
@@ -206,4 +206,112 @@ test("calculateCompound - 年齢が指定された場合ageが計算される", 
   const result = calculateCompound(params);
   assert.strictEqual(result[0]!.age, 40);
   assert.strictEqual(result[1]!.age, 41);
+});
+
+// --- calculateCompound: rate-risk モード ---
+
+test("calculateCompound (rate-risk) - 初年度は年初リスク資産×率の概算で取り崩される", () => {
+  // 利回り0・防衛なし・無税で、1,000,000 × 4% = 40,000 ぴったりが取れる
+  const params: CalculateParams = {
+    ...BASE_PARAMS,
+    initialAmount: 1000000,
+    annualReturnRate: 0,
+    withdrawalStartYear: 1,
+    withdrawalYears: 5,
+    withdrawalMode: "rate-risk",
+    withdrawalRate: 4,
+  };
+  const result = calculateCompound(params);
+  assert.ok(Math.abs(result[2]!.yearlyWithdrawal - 40000) < 1);
+});
+
+test("calculateCompound (rate-risk) - 資産が減れば翌年の引出額も減る", () => {
+  // 利回り0で毎年資産が減るので、引出額も逓減するはず
+  const params: CalculateParams = {
+    ...BASE_PARAMS,
+    initialAmount: 1000000,
+    monthlyContribution: 0,
+    annualReturnRate: 0,
+    expenseRatio: 0,
+    inflationRate: 0,
+    contributionYears: 0,
+    withdrawalStartYear: 0,
+    withdrawalYears: 5,
+    withdrawalMode: "rate-risk",
+    withdrawalRate: 10,
+    taxFree: true,
+  };
+  const result = calculateCompound(params);
+  // 取り崩し初年度（year=1）よりも、その翌年（year=2）の方が引出額が小さい
+  assert.ok(result[2]!.yearlyWithdrawal < result[1]!.yearlyWithdrawal);
+});
+
+test("calculateCompound (rate-risk) - Trinity モードと違ってインフレ調整されない", () => {
+  // インフレ率 > 0 でも、rate-risk モードはインフレ調整しない。
+  // Trinity モードでは初年度月額が固定でインフレで増えるが、
+  // rate-risk モードでは毎年再評価で実残高に追従する（インフレで自動的に増えるわけではない）。
+  const base: CalculateParams = {
+    ...BASE_PARAMS,
+    initialAmount: 10000000,
+    monthlyContribution: 0,
+    annualReturnRate: 0,
+    expenseRatio: 0,
+    inflationRate: 3,
+    contributionYears: 0,
+    withdrawalStartYear: 0,
+    withdrawalYears: 5,
+    withdrawalRate: 4,
+    taxFree: true,
+  };
+  const trinity = calculateCompound({ ...base, withdrawalMode: "rate" });
+  const riskBased = calculateCompound({ ...base, withdrawalMode: "rate-risk" });
+  // 初年度はほぼ同じ（基準が同じ＝総資産=リスク資産）はず
+  assert.ok(Math.abs(trinity[1]!.yearlyWithdrawal - riskBased[1]!.yearlyWithdrawal) < 1000);
+  // 2年目: Trinity はインフレ調整で増、rate-risk は減った資産で再評価して減
+  assert.ok(trinity[2]!.yearlyWithdrawal > riskBased[2]!.yearlyWithdrawal);
+});
+
+test("calculateCompound (rate-risk) - 防衛資産は基準から除外される", () => {
+  // 同じ総資産でも、防衛比率が高いほどリスク資産が少なくなり、引出額が小さくなる
+  const base: CalculateParams = {
+    ...BASE_PARAMS,
+    initialAmount: 10000000,
+    monthlyContribution: 0,
+    annualReturnRate: 0,
+    expenseRatio: 0,
+    defenseAnnualReturnRate: 0,
+    inflationRate: 0,
+    contributionYears: 0,
+    withdrawalStartYear: 0,
+    withdrawalYears: 1,
+    withdrawalMode: "rate-risk",
+    withdrawalRate: 4,
+    taxFree: true,
+  };
+  const noDefense = calculateCompound({ ...base, defenseRatio: 0 });
+  const halfDefense = calculateCompound({ ...base, defenseRatio: 50 });
+  // 防衛50%だとリスク資産は半分 → 引出額もおよそ半分
+  assert.ok(noDefense[1]!.yearlyWithdrawal > halfDefense[1]!.yearlyWithdrawal);
+  assert.ok(Math.abs(halfDefense[1]!.yearlyWithdrawal * 2 - noDefense[1]!.yearlyWithdrawal) < 1000);
+});
+
+test("calculateCompound (rate-risk) - defenseRatio=0 でも正常動作", () => {
+  const params: CalculateParams = {
+    ...BASE_PARAMS,
+    initialAmount: 1000000,
+    monthlyContribution: 0,
+    contributionYears: 0,
+    withdrawalStartYear: 0,
+    withdrawalYears: 3,
+    withdrawalMode: "rate-risk",
+    withdrawalRate: 4,
+    defenseRatio: 0,
+    taxFree: true,
+  };
+  const result = calculateCompound(params);
+  assert.strictEqual(result.length, 4);
+  for (const row of result) {
+    assert.ok(Number.isFinite(row.total));
+    assert.ok(Number.isFinite(row.yearlyWithdrawal));
+  }
 });

@@ -1,6 +1,6 @@
 // 決定論的な複利 + 取り崩しシミュレーション
 // 月次ループで運用 -> 積立 -> 取り崩し -> 損益按分課税 の順に処理する
-import { adjustedMonthlyPension } from "./pension.js";
+import { adjustedMonthlyPension } from "./pension.ts";
 
 export const TAX_RATE = 0.20315;
 
@@ -13,7 +13,7 @@ export interface CalculateParams {
   contributionYears: number;
   withdrawalStartYear: number;
   withdrawalYears: number;
-  withdrawalMode: "amount" | "rate";
+  withdrawalMode: "amount" | "rate" | "rate-risk";
   fixedMonthlyWithdrawal: number;
   withdrawalRate: number;
   inflationAdjustedWithdrawal: boolean;
@@ -210,6 +210,11 @@ export function calculateCompound(params: CalculateParams): YearlyProjection[] {
             rateBasedMonthlyWithdrawal = (currentTotal * withdrawalRate) / 100 / 12;
           } else if (m === 0) {
             rateBasedMonthlyWithdrawal *= 1 + ri;
+          }
+          baseWithdrawal = rateBasedMonthlyWithdrawal;
+        } else if (withdrawalMode === "rate-risk") {
+          if (m === 0) {
+            rateBasedMonthlyWithdrawal = (riskTotal * withdrawalRate) / 100 / 12;
           }
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else {

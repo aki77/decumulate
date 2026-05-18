@@ -23,7 +23,7 @@ npx serve .
 ## 機能
 
 - 積立フェーズの月次複利計算と、取り崩しフェーズの月次計算
-- 月額金額指定 / 年率（%）指定（Trinity Study）の 2 モード
+- 月額金額指定 / 年率（%）指定（Trinity Study）/ 年率（%）×リスク資産で毎年再評価 の 3 モード
 - 取り崩し時の損益按分課税（20.315%、NISA 想定で非課税切替可）
 - 公的年金（繰上げ -0.4%/月・繰下げ +0.7%/月）と他収入の控除
 - インフレ率を考慮した実質値ベースのモンテカルロ（GBM, 固定 seed で再現性あり）
@@ -36,10 +36,10 @@ npx serve .
 ```
 index.html              # メインHTML、Chart.js を CDN 読み込み
 styles.css              # スタイル
-src/calculate.js        # 決定論的な複利＋取り崩し計算
-src/monte-carlo.js      # モンテカルロ（Mulberry32 + Box-Muller）
-src/pension.js          # 年金繰上げ/繰下げ計算
-src/main.js             # UI 制御、Chart.js 描画
+src/calculate.ts        # 決定論的な複利＋取り崩し計算
+src/monte-carlo.ts      # モンテカルロ（Mulberry32 + Box-Muller）
+src/pension.ts          # 年金繰上げ/繰下げ計算
+src/main.ts             # UI 制御、Chart.js 描画
 .github/workflows/deploy.yml  # GitHub Pages 自動デプロイ
 ```
 

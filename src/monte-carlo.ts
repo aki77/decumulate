@@ -1,7 +1,7 @@
 // モンテカルロ・シミュレーション（GBM、5000パス）
 // 実質値（インフレ控除後）で計算。再現性のため Mulberry32 + Box-Muller を使用。
-import { adjustedMonthlyPension } from "./pension.js";
-import { TAX_RATE, needsRebalance, rebalanceBuckets, type CalculateParams } from "./calculate.js";
+import { adjustedMonthlyPension } from "./pension.ts";
+import { TAX_RATE, needsRebalance, rebalanceBuckets, type CalculateParams } from "./calculate.ts";
 
 const NUM_SIMULATIONS = 5000;
 const SEED = 42;
@@ -122,14 +122,16 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     basePension > 0 && currentAge != null ? Math.max(0, pensionStartAge - currentAge) : null;
 
   const isRateMode = withdrawalMode === "rate";
+  const isRateRiskMode = withdrawalMode === "rate-risk";
+  const isAnyRateMode = isRateMode || isRateRiskMode;
 
   // 名目固定の引出額は実質値で目減りするのでデフレ調整
   const preWithdrawalDeflation =
-    !isRateMode && !inflationAdjustedWithdrawal && ri > 0
+    !isAnyRateMode && !inflationAdjustedWithdrawal && ri > 0
       ? Math.pow(1 + ri, -withdrawalStartYear)
       : 1;
   const monthlyRealWithdrawalFactor =
-    !isRateMode && !inflationAdjustedWithdrawal && ri > 0
+    !isAnyRateMode && !inflationAdjustedWithdrawal && ri > 0
       ? 1 / Math.pow(1 + ri, 1 / 12)
       : 1;
 
@@ -225,6 +227,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
                 rateWithdrawalInitialized[i] = 1;
               }
               baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
+            } else if (isRateRiskMode) {
+              if (m === 0) {
+                rateBasedMonthlyWithdrawal[i] = (riskPaths[i]! * withdrawalRate) / 100 / 12;
+              }
+              baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
             } else {
               baseWithdrawal = currentMonthlyWithdrawal[i]!;
             }
@@ -317,6 +324,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
                 rateWithdrawalInitialized[i] = 1;
               }
               baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
+            } else if (isRateRiskMode) {
+              if (m === 0) {
+                rateBasedMonthlyWithdrawal[i] = (riskPaths[i]! * withdrawalRate) / 100 / 12;
+              }
+              baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
             } else {
               baseWithdrawal = currentMonthlyWithdrawal[i]!;
             }
@@ -342,7 +354,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
         }
       }
 
-      if (isWithdrawing && !isRateMode) {
+      if (isWithdrawing && !isAnyRateMode) {
         for (let i = 0; i < N; i++) {
           currentMonthlyWithdrawal[i]! *= monthlyRealWithdrawalFactor;
         }
