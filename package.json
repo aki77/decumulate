@@ -1,0 +1,19 @@
+{
+  "name": "decumulate",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc && cp index.html styles.css dist/",
+    "dev": "npm run build && npx serve dist",
+    "test": "node --test --experimental-strip-types tests/**/*.test.ts",
+    "check": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  }
+}
