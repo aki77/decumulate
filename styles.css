@@ -230,6 +230,29 @@ body {
   color: var(--accent);
 }
 
+.form-actions {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.reset-button {
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.reset-button:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .results h3 {
   font-size: 14px;
   margin: 0 0 10px;

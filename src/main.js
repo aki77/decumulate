@@ -12,6 +12,30 @@ const PRESETS = {
 
 const MAN = 10000;
 
+const STORAGE_KEY = "decumulate:inputs:v1";
+
+const PERSIST_IDS = [
+  "currentAge",
+  "initialAmount",
+  "monthlyContribution",
+  "productPreset",
+  "annualReturnRate",
+  "expenseRatio",
+  "inflationRate",
+  "volatility",
+  "contributionYears",
+  "withdrawalStartYear",
+  "withdrawalYears",
+  "withdrawalMode",
+  "fixedMonthlyWithdrawal",
+  "withdrawalRate",
+  "inflationAdjustedWithdrawal",
+  "taxFree",
+  "basePension",
+  "pensionStartAge",
+  "monthlyOtherIncome",
+];
+
 const HELP = {
   score: "枯渇確率・元本割れ確率・中央値残高から算出した 0–100 の総合指標。高いほど安心。",
   totalContrib: "初期投資額 + 月額積立 × 12 × 積立年数。自身が拠出した元本の合計。",
@@ -339,6 +363,69 @@ function renderSummary(projections, mc, params) {
   `;
 }
 
+function getInputValue(el) {
+  return el.type === "checkbox" ? el.checked : el.value;
+}
+
+function setInputValue(el, value) {
+  if (el.type === "checkbox") {
+    el.checked = Boolean(value);
+  } else {
+    el.value = String(value);
+  }
+}
+
+function getInputDefault(el) {
+  if (el.type === "checkbox") return el.defaultChecked;
+  if (el.tagName === "SELECT") {
+    return Array.from(el.options).find((o) => o.defaultSelected)?.value
+      ?? el.options[0]?.value
+      ?? "";
+  }
+  return el.defaultValue;
+}
+
+function saveInputs() {
+  try {
+    const data = {};
+    for (const id of PERSIST_IDS) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      data[id] = getInputValue(el);
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {}
+}
+
+function loadInputs() {
+  let data;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    data = JSON.parse(raw);
+  } catch {
+    return;
+  }
+  if (!data || typeof data !== "object") return;
+  for (const id of PERSIST_IDS) {
+    if (!Object.prototype.hasOwnProperty.call(data, id)) continue;
+    const el = document.getElementById(id);
+    if (!el) continue;
+    setInputValue(el, data[id]);
+  }
+}
+
+function resetInputs() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {}
+  for (const id of PERSIST_IDS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    setInputValue(el, getInputDefault(el));
+  }
+}
+
 function update() {
   const params = readParams();
   const projections = calculateCompound(params);
@@ -346,6 +433,7 @@ function update() {
   renderCompoundChart(projections, params);
   renderMonteCarloChart(mc, params);
   renderSummary(projections, mc, params);
+  saveInputs();
 }
 
 let debounceTimer = null;
@@ -354,25 +442,37 @@ function scheduleUpdate() {
   debounceTimer = setTimeout(update, 250);
 }
 
-function setupWithdrawalModeToggle() {
+function syncWithdrawalModeUI() {
   const select = document.getElementById("withdrawalMode");
   const amountWrap = document.getElementById("withdrawalAmountWrap");
   const rateWrap = document.getElementById("withdrawalRateWrap");
   const inflationToggleWrap = document.getElementById("inflationAdjustedWithdrawalWrap");
-  const sync = () => {
-    if (select.value === "rate") {
-      amountWrap.classList.add("hidden");
-      rateWrap.classList.remove("hidden");
-      // 率モードでは Trinity Study 準拠で毎年自動的にインフレ調整するので非表示
-      inflationToggleWrap.classList.add("hidden");
-    } else {
-      amountWrap.classList.remove("hidden");
-      rateWrap.classList.add("hidden");
-      inflationToggleWrap.classList.remove("hidden");
-    }
-  };
-  select.addEventListener("change", sync);
-  sync();
+  if (select.value === "rate") {
+    amountWrap.classList.add("hidden");
+    rateWrap.classList.remove("hidden");
+    // 率モードでは Trinity Study 準拠で毎年自動的にインフレ調整するので非表示
+    inflationToggleWrap.classList.add("hidden");
+  } else {
+    amountWrap.classList.remove("hidden");
+    rateWrap.classList.add("hidden");
+    inflationToggleWrap.classList.remove("hidden");
+  }
+}
+
+function setupWithdrawalModeToggle() {
+  const select = document.getElementById("withdrawalMode");
+  select.addEventListener("change", syncWithdrawalModeUI);
+  syncWithdrawalModeUI();
+}
+
+function setupResetButton() {
+  const button = document.getElementById("resetInputs");
+  if (!button) return;
+  button.addEventListener("click", () => {
+    resetInputs();
+    syncWithdrawalModeUI();
+    update();
+  });
 }
 
 function setupPensionPreset() {
@@ -403,27 +503,7 @@ function setupProductPreset() {
 }
 
 function bindInputs() {
-  const ids = [
-    "currentAge",
-    "initialAmount",
-    "monthlyContribution",
-    "annualReturnRate",
-    "expenseRatio",
-    "inflationRate",
-    "volatility",
-    "contributionYears",
-    "withdrawalStartYear",
-    "withdrawalYears",
-    "withdrawalMode",
-    "fixedMonthlyWithdrawal",
-    "withdrawalRate",
-    "inflationAdjustedWithdrawal",
-    "taxFree",
-    "basePension",
-    "pensionStartAge",
-    "monthlyOtherIncome",
-  ];
-  ids.forEach((id) => {
+  PERSIST_IDS.forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener("input", scheduleUpdate);
@@ -432,9 +512,11 @@ function bindInputs() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  setupWithdrawalModeToggle();
   setupPensionPreset();
   setupProductPreset();
   bindInputs();
+  loadInputs();
+  setupResetButton();
+  setupWithdrawalModeToggle();
   update();
 });
