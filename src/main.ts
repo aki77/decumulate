@@ -549,8 +549,20 @@ function renderMonthlyDetails(
   const host = document.getElementById("monthlyDetails");
   if (!host) return;
   const detSection = `<details class="monthly-section"><summary>決定論的（月次, 名目値）</summary>${renderMonthlyTable(detMonthly)}</details>`;
-  const mcSection = `<details class="monthly-section"><summary>モンテカルロ中央値パス（月次, 実質値）</summary>${renderMonthlyTable(mc.pivotMonthly)}</details>`;
-  host.innerHTML = detSection + mcSection;
+  const mcLabels: Array<[keyof typeof mc.pivotMonthlies, string]> = [
+    ["p90", "モンテカルロ P90 パス（楽観側, 月次, 実質値）"],
+    ["p75", "モンテカルロ P75 パス（やや楽観, 月次, 実質値）"],
+    ["p50", "モンテカルロ P50 パス（中央値, 月次, 実質値）"],
+    ["p25", "モンテカルロ P25 パス（やや悲観, 月次, 実質値）"],
+    ["p10", "モンテカルロ P10 パス（悲観側, 月次, 実質値）"],
+  ];
+  const mcSections = mcLabels
+    .map(([k, title]) => {
+      const open = k === "p50" ? " open" : "";
+      return `<details class="monthly-section"${open}><summary>${title}</summary>${renderMonthlyTable(mc.pivotMonthlies[k])}</details>`;
+    })
+    .join("");
+  host.innerHTML = detSection + mcSections;
 }
 
 function update(): void {
