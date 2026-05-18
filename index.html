@@ -94,6 +94,51 @@
         </div>
 
         <div class="field-group">
+          <h3>防衛資産（2バケット戦略）</h3>
+          <div class="field">
+            <label for="defenseRatio">
+              防衛資産配分比率（%）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">総資産のうち防衛資産（個人向け国債や現金など）で持つ割合。0% にすると従来の単一資産モデルと同じ挙動になる。</span></span>
+            </label>
+            <input id="defenseRatio" type="number" min="0" max="100" step="1" value="0" />
+          </div>
+          <div class="field">
+            <label for="defenseProductPreset">防衛資産プリセット</label>
+            <select id="defenseProductPreset">
+              <option value="custom">カスタム</option>
+              <option value="jgb10" selected>個人向け国債変動10年 (0.5% / 0%)</option>
+              <option value="cash">現金・普通預金 (0.1% / 0%)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="defenseAnnualReturnRate">
+              防衛資産の想定利回り（%/年）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">防衛資産の期待リターン。個人向け国債変動10年は 0.5% 前後、普通預金は 0.1% 前後。</span></span>
+            </label>
+            <input id="defenseAnnualReturnRate" type="number" min="0" max="10" step="0.1" value="0.5" />
+          </div>
+          <div class="field">
+            <label for="defenseVolatility">
+              防衛資産のボラティリティ（%/年）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">価格変動の年率標準偏差。元本保証商品（国債・預金）なら 0% で OK。</span></span>
+            </label>
+            <input id="defenseVolatility" type="number" min="0" max="20" step="0.5" value="0" />
+          </div>
+          <div class="field checkbox-field">
+            <input id="defensePriorityOnDrawdown" type="checkbox" checked />
+            <label for="defensePriorityOnDrawdown">下落時は防衛資産から優先的に取り崩す</label>
+            <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">リスク資産が高値から閾値以上下落しているとき、防衛資産を先に取り崩してリスク資産の売却を回避する（バケット戦略）。OFF のときは常に時価比率で両資産から按分取り崩し。</span></span>
+          </div>
+          <div class="field" id="drawdownThresholdWrap">
+            <label for="drawdownThresholdPercent">
+              下落判定の閾値（%）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">取り崩し開始後のリスク資産ピーク（高値）から、現在のリスク資産評価額が何%下落していたら「下落中」と判定するか。一般的には 10〜20%。</span></span>
+            </label>
+            <input id="drawdownThresholdPercent" type="number" min="0" max="50" step="1" value="10" />
+          </div>
+        </div>
+
+        <div class="field-group">
           <h3>期間</h3>
           <div class="field">
             <label for="contributionYears">積立年数</label>

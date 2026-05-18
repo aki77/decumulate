@@ -10,6 +10,12 @@ const PRESETS = {
   topix: { annualReturnRate: 6, expenseRatio: 0.143, volatility: 18 },
 };
 
+const DEFENSE_PRESETS = {
+  custom: null,
+  jgb10: { annualReturnRate: 0.5, volatility: 0 },
+  cash: { annualReturnRate: 0.1, volatility: 0 },
+};
+
 const MAN = 10000;
 
 const STORAGE_KEY = "decumulate:inputs:v1";
@@ -34,6 +40,12 @@ const PERSIST_IDS = [
   "basePension",
   "pensionStartAge",
   "monthlyOtherIncome",
+  "defenseRatio",
+  "defenseProductPreset",
+  "defenseAnnualReturnRate",
+  "defenseVolatility",
+  "defensePriorityOnDrawdown",
+  "drawdownThresholdPercent",
 ];
 
 const HELP = {
@@ -98,6 +110,11 @@ function readParams() {
     basePension: readMan("basePension", 0),
     pensionStartAge: readNumber("pensionStartAge", 65),
     monthlyOtherIncome: readMan("monthlyOtherIncome", 0),
+    defenseRatio: readNumber("defenseRatio", 0),
+    defenseAnnualReturnRate: readNumber("defenseAnnualReturnRate", 0.5),
+    defenseVolatility: readNumber("defenseVolatility", 0),
+    defensePriorityOnDrawdown: readChecked("defensePriorityOnDrawdown"),
+    drawdownThresholdPercent: readNumber("drawdownThresholdPercent", 10),
   };
 }
 
@@ -471,6 +488,7 @@ function setupResetButton() {
   button.addEventListener("click", () => {
     resetInputs();
     syncWithdrawalModeUI();
+    syncDefenseUI();
     update();
   });
 }
@@ -502,6 +520,36 @@ function setupProductPreset() {
   });
 }
 
+function setupDefensePreset() {
+  const select = document.getElementById("defenseProductPreset");
+  if (!select) return;
+  select.addEventListener("change", () => {
+    const preset = DEFENSE_PRESETS[select.value];
+    if (!preset) return;
+    document.getElementById("defenseAnnualReturnRate").value = preset.annualReturnRate;
+    document.getElementById("defenseVolatility").value = preset.volatility;
+    scheduleUpdate();
+  });
+}
+
+function syncDefenseUI() {
+  const checkbox = document.getElementById("defensePriorityOnDrawdown");
+  const wrap = document.getElementById("drawdownThresholdWrap");
+  if (!checkbox || !wrap) return;
+  if (checkbox.checked) {
+    wrap.classList.remove("hidden");
+  } else {
+    wrap.classList.add("hidden");
+  }
+}
+
+function setupDefenseToggle() {
+  const checkbox = document.getElementById("defensePriorityOnDrawdown");
+  if (!checkbox) return;
+  checkbox.addEventListener("change", syncDefenseUI);
+  syncDefenseUI();
+}
+
 function bindInputs() {
   PERSIST_IDS.forEach((id) => {
     const el = document.getElementById(id);
@@ -514,9 +562,11 @@ function bindInputs() {
 document.addEventListener("DOMContentLoaded", () => {
   setupPensionPreset();
   setupProductPreset();
+  setupDefensePreset();
   bindInputs();
   loadInputs();
   setupResetButton();
   setupWithdrawalModeToggle();
+  setupDefenseToggle();
   update();
 });
