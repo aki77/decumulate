@@ -393,10 +393,6 @@ body {
   padding: 16px 24px 32px;
 }
 
-.page-footer a {
-  color: var(--accent);
-}
-
 .monthly-details {
   margin-top: 8px;
 }
