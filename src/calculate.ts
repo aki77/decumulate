@@ -112,6 +112,7 @@ export interface MonthlyProjection {
   total: number;
   monthlyWithdrawal: number;
   baseWithdrawal: number;
+  rateWithdrawalBasis: number | null;
   monthlyPension: number;
   monthlyOtherIncome: number;
   monthlyGainRisk: number;
@@ -456,6 +457,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
 
   let currentMonthlyWithdrawal = fixedMonthlyWithdrawal;
   let rateBasedMonthlyWithdrawal = 0;
+  let rateWithdrawalBasis: number | null = null;
   const isAnyRateMode = withdrawalMode === "rate" || withdrawalMode === "rate-risk";
   // 決定論版は名目値計算のため、年率モードの下限/上限を毎年初に *=(1+ri) して実質購買力を一定に保つ。
   let currentMonthlyFloor: number | null = monthlyWithdrawalFloor;
@@ -600,13 +602,16 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         if (withdrawalMode === "rate") {
           if (m === 0 && year === withdrawalStartYear + 1) {
             rateBasedMonthlyWithdrawal = (currentTotal * withdrawalRate) / 100 / 12;
+            rateWithdrawalBasis = Math.round(currentTotal);
           } else if (m === 0) {
+            rateWithdrawalBasis = Math.round(currentTotal);
             rateBasedMonthlyWithdrawal *= 1 + ri;
           }
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else if (withdrawalMode === "rate-risk") {
           if (m === 0) {
             rateBasedMonthlyWithdrawal = (riskSideForRate * withdrawalRate) / 100 / 12;
+            rateWithdrawalBasis = Math.round(riskSideForRate);
           }
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else {
@@ -712,6 +717,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         total: Math.round(nisaTotal + taxableRiskTotal + defenseTotal + idecoState.total),
         monthlyWithdrawal: Math.round(monthlyWithdrawal),
         baseWithdrawal: Math.round(baseWithdrawal),
+        rateWithdrawalBasis,
         monthlyPension: Math.round(monthPension),
         monthlyOtherIncome: Math.round(monthOtherIncome),
         monthlyGainRisk: Math.round(gainRisk),

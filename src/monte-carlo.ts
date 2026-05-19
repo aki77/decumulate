@@ -299,6 +299,12 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       ),
       monthlyWithdrawal: Math.round(raw.monthlyWithdrawal),
       baseWithdrawal: Math.round(raw.monthlyWithdrawal),
+      rateWithdrawalBasis:
+        raw.month === 1 && (isRateMode || isRateRiskMode)
+          ? isRateRiskMode
+            ? Math.round(raw.prevNisa + raw.prevTaxable + raw.prevIdeco)
+            : Math.round(raw.prevNisa + raw.prevTaxable + raw.prevDefense + raw.prevIdeco)
+          : null,
       monthlyPension: Math.round(raw.monthlyPension),
       monthlyOtherIncome: Math.round(raw.monthlyOtherIncome),
       monthlyGainRisk: Math.round(raw.monthlyGainRisk),

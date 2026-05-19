@@ -697,7 +697,7 @@ function renderTransferBadge(info: NisaTransferInfo | null): string {
   return renderBadge("transfer-badge", "▲", "NISA振替", tip);
 }
 
-function renderMonthlyTable(monthly: MonthlyProjection[]): string {
+function renderMonthlyTable(monthly: MonthlyProjection[], params: CalculateParams): string {
   if (monthly.length === 0) return "";
   const byYear = new Map<number, MonthlyProjection[]>();
   for (const m of monthly) {
@@ -718,15 +718,20 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
       const pension = firstRow.monthlyPension;
       const other = firstRow.monthlyOtherIncome;
       const total = firstRow.baseWithdrawal + pension + other;
-      const hasIncome = pension > 0 || other > 0;
-      const lines: string[] = [`資産取り崩し目標: ${formatMan(firstRow.baseWithdrawal)}`];
+      const isRateMode = params.withdrawalMode === "rate" || params.withdrawalMode === "rate-risk";
+      const lines: string[] = [];
+      if (isRateMode && firstRow.rateWithdrawalBasis != null) {
+        const basisLabel = params.withdrawalMode === "rate-risk" ? "リスク資産" : "総資産";
+        lines.push(`${basisLabel} ${formatMan(firstRow.rateWithdrawalBasis)} × ${params.withdrawalRate}% / 12 = ${formatMan(firstRow.baseWithdrawal)}`);
+      } else {
+        lines.push(`資産取り崩し目標: ${formatMan(firstRow.baseWithdrawal)}`);
+      }
       if (pension > 0) lines.push(`年金: ${formatMan(pension)}`);
       if (other > 0) lines.push(`その他収入: ${formatMan(other)}`);
-      if (hasIncome) lines.push(`合計: ${formatMan(total)}`);
+      if (pension > 0 || other > 0) lines.push(`合計: ${formatMan(total)}`);
       const tipHtml = lines.join("<br>");
-      const label = hasIncome ? "合計生活費" : "基準月額";
       const icon = helpIcon(tipHtml, { outerClass: "year-summary-help", tipClass: "year-summary-tip", ariaLabel: "内訳" });
-      return `<span class="year-summary">${label} ${formatMan(total)}${icon}</span> `;
+      return `<span class="year-summary">合計生活費 ${formatMan(total)}${icon}</span> `;
     })();
     parts.push(
       `<details class="monthly-year"><summary>${yearLabel} ` +
@@ -780,10 +785,11 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
 function renderMonthlyDetails(
   detMonthly: MonthlyProjection[],
   mc: ReturnType<typeof simulateMonteCarlo>,
+  params: CalculateParams,
 ): void {
   const host = document.getElementById("monthlyDetails");
   if (!host) return;
-  const detSection = `<details class="monthly-section"><summary>決定論的（月次, 名目値）</summary>${renderMonthlyTable(detMonthly)}</details>`;
+  const detSection = `<details class="monthly-section"><summary>決定論的（月次, 名目値）</summary>${renderMonthlyTable(detMonthly, params)}</details>`;
   const mcLabels: Array<[keyof typeof mc.pivotMonthlies, string]> = [
     ["p90", "モンテカルロ P90 パス（楽観側, 月次, 実質値）"],
     ["p75", "モンテカルロ P75 パス（やや楽観, 月次, 実質値）"],
@@ -794,7 +800,7 @@ function renderMonthlyDetails(
   const mcSections = mcLabels
     .map(
       ([k, title]) =>
-        `<details class="monthly-section"><summary>${title}</summary>${renderMonthlyTable(mc.pivotMonthlies[k])}</details>`,
+        `<details class="monthly-section"><summary>${title}</summary>${renderMonthlyTable(mc.pivotMonthlies[k], params)}</details>`,
     )
     .join("");
   host.innerHTML = detSection + mcSections;
@@ -807,7 +813,7 @@ function update(): void {
   renderCompoundChart(yearly, params);
   renderMonteCarloChart(mc, params);
   renderSummary(yearly, mc, params);
-  renderMonthlyDetails(monthly, mc);
+  renderMonthlyDetails(monthly, mc, params);
   saveInputs();
 }
 
