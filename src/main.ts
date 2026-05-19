@@ -42,6 +42,8 @@ const MAN = 10000;
 
 const STORAGE_KEY = "decumulate:inputs:v1";
 
+const UPDATE_DEBOUNCE_MS = 500;
+
 const PERSIST_IDS = [
   "currentAge",
   "initialAmount",
@@ -640,7 +642,7 @@ function update(): void {
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleUpdate(): void {
   if (debounceTimer !== null) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(update, 250);
+  debounceTimer = setTimeout(update, UPDATE_DEBOUNCE_MS);
 }
 
 function syncWithdrawalModeUI(): void {
@@ -760,11 +762,29 @@ function bindInputs(): void {
   });
 }
 
+function setupWheelGuard(): void {
+  document.addEventListener(
+    "wheel",
+    (e) => {
+      const el = document.activeElement;
+      if (
+        el instanceof HTMLInputElement &&
+        el.type === "number" &&
+        e.target === el
+      ) {
+        e.preventDefault();
+      }
+    },
+    { passive: false },
+  );
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   setupPensionPreset();
   setupProductPreset();
   setupDefensePreset();
   bindInputs();
+  setupWheelGuard();
   loadInputs();
   setupResetButton();
   setupWithdrawalModeToggle();
