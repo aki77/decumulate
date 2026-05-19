@@ -991,15 +991,19 @@ function renderOtherIncomes(): void {
     row.dataset["id"] = entry.id;
     row.innerHTML =
       `<input class="oi-label" type="text" placeholder="ラベル（任意, 例: 副業）" />` +
-      `<button type="button" class="oi-remove" aria-label="削除">×</button>` +
+      `<div class="oi-controls">` +
       `<input class="oi-amount" type="number" min="0" step="1" placeholder="金額(万円)" />` +
       `<select class="oi-mode">` +
       `<option value="monthly">月額</option>` +
       `<option value="annual">年額</option>` +
       `</select>` +
+      `<button type="button" class="oi-remove" aria-label="削除">×</button>` +
+      `</div>` +
+      `<div class="oi-period-row">` +
       `<input class="oi-start" type="number" min="0" step="1" placeholder="開始(${unit})" />` +
       `<span class="oi-period-sep">〜</span>` +
-      `<input class="oi-end" type="number" min="0" step="1" placeholder="終了(${unit})" />`;
+      `<input class="oi-end" type="number" min="0" step="1" placeholder="終了(${unit})" />` +
+      `</div>`;
 
     const labelEl = row.querySelector(".oi-label") as HTMLInputElement;
     const amountEl = row.querySelector(".oi-amount") as HTMLInputElement;
