@@ -29,12 +29,56 @@
             <input id="currentAge" type="number" min="0" max="100" step="1" placeholder="例: 35" />
           </div>
           <div class="field">
-            <label for="initialAmount">初期投資額（万円）</label>
-            <input id="initialAmount" type="number" min="0" step="1" value="0" />
-          </div>
-          <div class="field">
             <label for="monthlyContribution">月額積立（万円）</label>
             <input id="monthlyContribution" type="number" min="0" step="1" value="5" />
+          </div>
+        </div>
+
+        <div class="field-group">
+          <h3>
+            口座構成（NISA / 特定 / 防衛）
+            <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">NISAは非課税、特定リスクと防衛は課税（20.315%）。各口座について「時価」と「うち含み益」を入力する。元本=時価-含み益として扱う。</span></span>
+          </h3>
+          <div class="field">
+            <label for="initialNisa">NISA 時価（万円）</label>
+            <input id="initialNisa" type="number" min="0" step="1" value="0" />
+          </div>
+          <div class="field">
+            <label for="initialNisaGain">うちNISA 含み益（万円）</label>
+            <input id="initialNisaGain" type="number" min="0" step="1" value="0" />
+          </div>
+          <div class="field">
+            <label for="initialTaxableRisk">特定リスク 時価（万円）</label>
+            <input id="initialTaxableRisk" type="number" min="0" step="1" value="0" />
+          </div>
+          <div class="field">
+            <label for="initialTaxableRiskGain">うち特定リスク 含み益（万円）</label>
+            <input id="initialTaxableRiskGain" type="number" min="0" step="1" value="0" />
+          </div>
+          <div class="field">
+            <label for="initialDefense">防衛資産 時価（万円）</label>
+            <input id="initialDefense" type="number" min="0" step="1" value="0" />
+          </div>
+          <div class="field">
+            <label for="initialDefenseGain">うち防衛資産 含み益（万円）</label>
+            <input id="initialDefenseGain" type="number" min="0" step="1" value="0" />
+          </div>
+          <div class="field">
+            <label for="nisaInitialLifetimeUsed">
+              NISA生涯枠の既使用額（万円）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">既にNISAで買付済みの累計額（買付ベース）。生涯1800万円（夫婦モードで3600万円）から差し引く。</span></span>
+            </label>
+            <input id="nisaInitialLifetimeUsed" type="number" min="0" step="1" value="0" />
+          </div>
+          <div class="field checkbox-field">
+            <input id="isCoupled" type="checkbox" />
+            <label for="isCoupled">夫婦モード（NISA枠を2人分にする）</label>
+            <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">年間枠 360万 → 720万、生涯枠 1800万 → 3600万 に拡張する。資産・収入・年金は1人分のままで扱う。</span></span>
+          </div>
+          <div class="field checkbox-field">
+            <input id="nisaTransferEnabled" type="checkbox" />
+            <label for="nisaTransferEnabled">特定口座からNISAへ振替（成長投資枠を埋める）</label>
+            <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">毎年1月に、月次積立で消費する分を除いた残りの年枠を特定口座からの振替（売却→NISA買付）で埋める。売却時の含み益には課税される。</span></span>
           </div>
         </div>
 
@@ -86,22 +130,10 @@
             </label>
             <input id="inflationRate" type="number" min="0" max="10" step="0.1" value="2" />
           </div>
-          <div class="field checkbox-field">
-            <input id="taxFree" type="checkbox" />
-            <label for="taxFree">NISA 等の非課税口座として計算する</label>
-            <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">ONにすると運用益と取り崩し時に税金（20.315%）が課されない計算になる。</span></span>
-          </div>
         </div>
 
         <div class="field-group">
           <h3>防衛資産（2バケット戦略）</h3>
-          <div class="field">
-            <label for="defenseRatio">
-              防衛資産配分比率（%）
-              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">総資産のうち防衛資産（個人向け国債や現金など）で持つ割合。0% にすると従来の単一資産モデルと同じ挙動になる。</span></span>
-            </label>
-            <input id="defenseRatio" type="number" min="0" max="100" step="1" value="0" />
-          </div>
           <div class="field">
             <label for="defenseProductPreset">防衛資産プリセット</label>
             <select id="defenseProductPreset">

@@ -1,7 +1,9 @@
 import {
   calculateCompound,
+  NISA_LIFETIME_LIMIT,
   type CalculateParams,
   type MonthlyProjection,
+  type NisaTransferInfo,
   type RebalanceInfo,
   type YearlyProjection,
 } from "./calculate.ts";
@@ -45,13 +47,21 @@ const DEFENSE_PRESETS: Record<string, DefensePreset | null> = {
 
 const MAN = 10000;
 
-const STORAGE_KEY = "decumulate:inputs:v1";
+const STORAGE_KEY = "decumulate:inputs:v2";
 
 const UPDATE_DEBOUNCE_MS = 500;
 
 const PERSIST_IDS = [
   "currentAge",
-  "initialAmount",
+  "initialNisa",
+  "initialNisaGain",
+  "initialTaxableRisk",
+  "initialTaxableRiskGain",
+  "initialDefense",
+  "initialDefenseGain",
+  "nisaInitialLifetimeUsed",
+  "isCoupled",
+  "nisaTransferEnabled",
   "monthlyContribution",
   "productPreset",
   "annualReturnRate",
@@ -67,10 +77,8 @@ const PERSIST_IDS = [
   "monthlyWithdrawalFloor",
   "monthlyWithdrawalCeiling",
   "inflationAdjustedWithdrawal",
-  "taxFree",
   "basePension",
   "pensionStartAge",
-  "defenseRatio",
   "defenseProductPreset",
   "defenseAnnualReturnRate",
   "defenseVolatility",
@@ -110,6 +118,8 @@ const HELP: Record<string, string> = {
   mcP90: "最終資産分布の上位 10% タイル。上振れシナリオの目安。",
   depletion: "取り崩し期間中に資産がゼロになる試行の割合。",
   failure: "最終資産が積立元本合計を下回る試行の割合。",
+  finalNisa: "シミュレーション最終年のNISA口座残高（時価, 名目値）。NISAは非課税のため、取り崩しを最後に回すと有利。",
+  nisaUsage: "NISA生涯枠（1人1800万 / 夫婦3600万）のうち、買付額ベースで何%を使ったか。",
 };
 
 function helpIcon(text: string): string {
@@ -158,7 +168,15 @@ function readParams(): MonteCarloParams {
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
   return {
     currentAge,
-    initialAmount: readMan("initialAmount", 0),
+    initialNisa: readMan("initialNisa", 0),
+    initialNisaGain: readMan("initialNisaGain", 0),
+    initialTaxableRisk: readMan("initialTaxableRisk", 0),
+    initialTaxableRiskGain: readMan("initialTaxableRiskGain", 0),
+    initialDefense: readMan("initialDefense", 0),
+    initialDefenseGain: readMan("initialDefenseGain", 0),
+    nisaInitialLifetimeUsed: readMan("nisaInitialLifetimeUsed", 0),
+    isCoupled: readChecked("isCoupled"),
+    nisaTransferEnabled: readChecked("nisaTransferEnabled"),
     monthlyContribution: readMan("monthlyContribution", 5),
     annualReturnRate: readNumber("annualReturnRate", 5),
     expenseRatio: readNumber("expenseRatio", 0.1),
@@ -176,11 +194,9 @@ function readParams(): MonteCarloParams {
     monthlyWithdrawalFloor: readManOrNull("monthlyWithdrawalFloor"),
     monthlyWithdrawalCeiling: readManOrNull("monthlyWithdrawalCeiling"),
     inflationAdjustedWithdrawal: readChecked("inflationAdjustedWithdrawal"),
-    taxFree: readChecked("taxFree"),
     basePension: readMan("basePension", 0),
     pensionStartAge: readNumber("pensionStartAge", 65),
     otherIncomes: normalizeOtherIncomes(otherIncomesState, currentAge, totalYears, MAN),
-    defenseRatio: readNumber("defenseRatio", 0),
     defenseAnnualReturnRate: readNumber("defenseAnnualReturnRate", 0.5),
     defenseVolatility: readNumber("defenseVolatility", 0),
     defensePriorityOnDrawdown: readChecked("defensePriorityOnDrawdown"),
@@ -440,9 +456,13 @@ function renderSummary(
   params: CalculateParams,
 ): void {
   const last = projections[projections.length - 1]!;
-  const totalContrib =
-    params.initialAmount + params.monthlyContribution * 12 * params.contributionYears;
+  const initialTotal =
+    params.initialNisa + params.initialTaxableRisk + params.initialDefense;
+  const totalContrib = initialTotal + params.monthlyContribution * 12 * params.contributionYears;
   const totalWithdrawn = projections.reduce((s, p) => s + p.yearlyWithdrawal, 0);
+  const nisaLifetimeLimit = params.isCoupled ? NISA_LIFETIME_LIMIT * 2 : NISA_LIFETIME_LIMIT;
+  const nisaLifetimeUsageRatio =
+    nisaLifetimeLimit > 0 ? last.nisaLifetimeUsed / nisaLifetimeLimit : 0;
   const score = computeSecurityScore({
     depletionProbability: mc.depletionProbability,
     failureProbability: mc.failureProbability,
@@ -463,6 +483,8 @@ function renderSummary(
       <div class="metric"><div class="metric-label">運用益（税引後）${helpIcon(HELP["interest"]!)}</div><div class="metric-value">${formatMan(last.interest)}</div></div>
       <div class="metric"><div class="metric-label">想定税金${helpIcon(HELP["tax"]!)}</div><div class="metric-value">${formatMan(last.tax)}</div></div>
       <div class="metric"><div class="metric-label">総引出額（名目）${helpIcon(HELP["totalWithdrawn"]!)}</div><div class="metric-value">${formatMan(totalWithdrawn)}</div></div>
+      <div class="metric"><div class="metric-label">最終 NISA 残高${helpIcon(HELP["finalNisa"]!)}</div><div class="metric-value">${formatMan(last.nisaTotal)}</div></div>
+      <div class="metric"><div class="metric-label">NISA 生涯枠使用率${helpIcon(HELP["nisaUsage"]!)}</div><div class="metric-value">${formatPercent(nisaLifetimeUsageRatio)}</div></div>
       <div class="metric"><div class="metric-label">MC 中央値残高（実質）${helpIcon(HELP["mcP50"]!)}</div><div class="metric-value">${formatMan(mc.finalP50)}</div></div>
       <div class="metric"><div class="metric-label">MC 悲観値 p10（実質）${helpIcon(HELP["mcP10"]!)}</div><div class="metric-value">${formatMan(mc.finalP10)}</div></div>
       <div class="metric"><div class="metric-label">MC 楽観値 p90（実質）${helpIcon(HELP["mcP90"]!)}</div><div class="metric-value">${formatMan(mc.finalP90)}</div></div>
@@ -588,13 +610,29 @@ function ratioSub(ratio: number | null): string {
 function renderRebalanceBadge(info: RebalanceInfo | null): string {
   if (!info) return "";
   const dirLabel = info.direction === "risk-to-defense" ? "リスク → 防衛" : "防衛 → リスク";
+  const nisaUsedLine =
+    info.nisaUsed > 0 ? `<br>うちNISA枠充当 ${formatMan(info.nisaUsed)}` : "";
   const tip =
     `${dirLabel}<br>` +
     `売却額 ${formatMan(info.sellAmount)}<br>` +
     `税額 ${formatMan(info.taxAmount)}<br>` +
-    `受取額 ${formatMan(info.proceeds)}`;
+    `受取額 ${formatMan(info.proceeds)}` +
+    nisaUsedLine;
   return (
     `<span class="rebalance-badge" data-direction="${info.direction}" tabindex="0" aria-label="${dirLabel}">●` +
+    `<span class="rebalance-tip">${tip}</span></span>`
+  );
+}
+
+function renderTransferBadge(info: NisaTransferInfo | null): string {
+  if (!info) return "";
+  const tip =
+    `特定 → NISA 振替<br>` +
+    `売却額 ${formatMan(info.sellAmount)}<br>` +
+    `税額 ${formatMan(info.taxAmount)}<br>` +
+    `NISA買付 ${formatMan(info.proceeds)}`;
+  return (
+    `<span class="transfer-badge" tabindex="0" aria-label="NISA振替">▲` +
     `<span class="rebalance-tip">${tip}</span></span>`
   );
 }
@@ -622,19 +660,23 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
     );
     parts.push(
       `<table class="monthly-table"><thead><tr>` +
-        `<th>月</th><th>リスク資産</th><th>防衛資産</th><th>合計</th>` +
+        `<th>月</th><th>NISA</th><th>特定リスク</th><th>防衛資産</th><th>合計</th>` +
         `<th>純引出</th><th>年金</th><th>他収入</th>` +
-        `<th>リスク損益</th><th>防衛損益</th><th>月率</th><th>リバランス</th>` +
+        `<th>リスク損益</th><th>防衛損益</th><th>月率</th><th>イベント</th>` +
         `</tr></thead><tbody>`,
     );
     for (const r of rows) {
       const band = classifyRateBand(r.monthlyRate, false);
       const defenseRatio = r.total > 0 ? r.defenseTotal / r.total : null;
-      const riskRatio = defenseRatio != null ? 1 - defenseRatio : null;
+      const nisaRatio = r.total > 0 ? r.nisaTotal / r.total : null;
+      const taxableRiskRatio = r.total > 0 ? r.taxableRiskTotal / r.total : null;
+      const event =
+        renderTransferBadge(r.nisaTransferInfo) + renderRebalanceBadge(r.rebalanceInfo);
       parts.push(
         `<tr>` +
           `<td>${r.month}月</td>` +
-          `<td>${formatMan(r.riskTotal)}${ratioSub(riskRatio)}</td>` +
+          `<td>${formatMan(r.nisaTotal)}${ratioSub(nisaRatio)}</td>` +
+          `<td>${formatMan(r.taxableRiskTotal)}${ratioSub(taxableRiskRatio)}</td>` +
           `<td>${formatMan(r.defenseTotal)}${ratioSub(defenseRatio)}</td>` +
           `<td>${formatMan(r.total)}</td>` +
           `<td>${formatMan(r.monthlyWithdrawal)}</td>` +
@@ -643,7 +685,7 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
           `<td class="${r.monthlyGainRisk < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainRisk)}</td>` +
           `<td class="${r.monthlyGainDefense < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainDefense)}</td>` +
           `<td class="monthly-rate" data-rate-band="${band}">${formatRate(r.monthlyRate)}</td>` +
-          `<td>${renderRebalanceBadge(r.rebalanceInfo)}</td>` +
+          `<td>${event}</td>` +
           `</tr>`,
       );
     }

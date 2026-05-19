@@ -1,34 +1,58 @@
 // 決定論的な複利 + 取り崩しシミュレーション
 // 月次ループで運用 -> 積立 -> 取り崩し -> 損益按分課税 の順に処理する
+// 口座構造: NISA(非課税) / 特定リスク(課税) / 防衛(課税) の3バケット
 import { adjustedMonthlyPension } from "./pension.ts";
 import { sumOtherIncomeAt, type OtherIncomeMonthly } from "./other-income.ts";
 
 export const TAX_RATE = 0.20315;
 
+// NISA成長投資枠の年間/生涯上限（円）
+export const NISA_ANNUAL_LIMIT = 3_600_000;
+export const NISA_LIFETIME_LIMIT = 18_000_000;
+
 export interface CalculateParams {
-  initialAmount: number;
+  // 初期化(口座 × 金額/含み益)
+  initialNisa: number;
+  initialNisaGain: number;
+  initialTaxableRisk: number;
+  initialTaxableRiskGain: number;
+  initialDefense: number;
+  initialDefenseGain: number;
+
+  // 積立・運用
   monthlyContribution: number;
   annualReturnRate: number;
   expenseRatio: number;
   inflationRate: number;
+
+  // 期間
   contributionYears: number;
   withdrawalStartYear: number;
   withdrawalYears: number;
+
+  // 取り崩し
   withdrawalMode: "amount" | "rate" | "rate-risk";
   fixedMonthlyWithdrawal: number;
   withdrawalRate: number;
   monthlyWithdrawalFloor: number | null;
   monthlyWithdrawalCeiling: number | null;
   inflationAdjustedWithdrawal: boolean;
-  taxFree: boolean;
+
+  // 年金・他収入
   basePension: number;
   pensionStartAge: number;
   currentAge: number | null;
   otherIncomes: OtherIncomeMonthly[];
-  defenseRatio: number;
+
+  // 防衛資産
   defenseAnnualReturnRate: number;
   rebalanceThresholdPoint: number;
   defensePriorityOnDrawdown: boolean;
+
+  // NISA枠
+  isCoupled: boolean;
+  nisaTransferEnabled: boolean;
+  nisaInitialLifetimeUsed: number;
 }
 
 export interface YearlyProjection {
@@ -41,6 +65,10 @@ export interface YearlyProjection {
   yearlyWithdrawal: number;
   yearlyPension: number;
   yearlyOtherIncome: number;
+  nisaTotal: number;
+  taxableRiskTotal: number;
+  defenseTotal: number;
+  nisaLifetimeUsed: number;
 }
 
 export interface RebalanceInfo {
@@ -48,20 +76,21 @@ export interface RebalanceInfo {
   sellAmount: number;
   taxAmount: number;
   proceeds: number;
+  nisaUsed: number;
 }
 
-export interface RebalanceResult {
-  riskTotal: number;
-  riskPrincipal: number;
-  defenseTotal: number;
-  defensePrincipal: number;
-  info: RebalanceInfo | null;
+export interface NisaTransferInfo {
+  sellAmount: number;
+  taxAmount: number;
+  proceeds: number;
 }
 
 export interface MonthlyProjection {
   year: number;
   month: number;
   age: number | null;
+  nisaTotal: number;
+  taxableRiskTotal: number;
   riskTotal: number;
   defenseTotal: number;
   total: number;
@@ -73,6 +102,7 @@ export interface MonthlyProjection {
   monthlyGain: number;
   monthlyRate: number;
   rebalanceInfo: RebalanceInfo | null;
+  nisaTransferInfo: NisaTransferInfo | null;
 }
 
 export interface CompoundResult {
@@ -126,7 +156,7 @@ export function splitProportional(
     fromRisk += fromDefense - defenseTotal;
     fromDefense = defenseTotal;
   }
-  return [Math.min(fromRisk, riskTotal), Math.min(fromDefense, defenseTotal)];
+  return [fromRisk, fromDefense];
 }
 
 // リスク資産から優先取り崩し。リスクが足りない場合は不足分を防衛から補う。
@@ -139,6 +169,18 @@ export function splitRiskFirst(
   const fromRisk = Math.min(amount, Math.max(riskTotal, 0));
   const fromDefense = Math.min(amount - fromRisk, Math.max(defenseTotal, 0));
   return [fromRisk, fromDefense];
+}
+
+// リスクサイド取り崩しを 特定リスク → NISA の順に分解。NISAは最後に触る。
+export function splitRiskSide(
+  amount: number,
+  taxableRiskTotal: number,
+  nisaTotal: number,
+): [number, number] {
+  if (amount <= 0) return [0, 0];
+  const fromTaxable = Math.min(amount, Math.max(taxableRiskTotal, 0));
+  const fromNisa = Math.min(amount - fromTaxable, Math.max(nisaTotal, 0));
+  return [fromTaxable, fromNisa];
 }
 
 // 月末時点の防衛資産比率が目標から thresholdPoint（pt）以上乖離していたらリバランス発動。
@@ -154,57 +196,177 @@ export function needsRebalance(
   return Math.abs(currentRatio - defenseRatio) * 100 > thresholdPoint;
 }
 
-// 売却側のみ含み益按分課税。税引後の手取りを買付側に加算して目標比率に近づける。
-export function rebalanceBuckets(
-  riskTotal: number,
-  riskPrincipal: number,
-  defenseTotal: number,
-  defensePrincipal: number,
+export interface TriBucketsState {
+  nisaTotal: number;
+  nisaPrincipal: number;
+  taxableRiskTotal: number;
+  taxableRiskPrincipal: number;
+  defenseTotal: number;
+  defensePrincipal: number;
+}
+
+export interface RebalanceTriResult {
+  state: TriBucketsState;
+  info: RebalanceInfo | null;
+}
+
+// 3バケット用リバランス。
+// - 売却方向（リスクサイド過大 → 防衛買付）: 特定リスクから優先売却、不足分のみNISAから（NISA売却は非課税）。
+// - 買付方向（防衛過大 → リスクサイド買付）: 防衛から売却、税引後proceedsをNISA枠残優先で充当、超過分は特定リスクへ。
+export function rebalanceTriBuckets(
+  state: TriBucketsState,
   defenseRatio: number,
   taxRate: number,
-): RebalanceResult {
-  const total = riskTotal + defenseTotal;
-  const delta = total > 0 ? defenseRatio * total - defenseTotal : 0;
-  const sellRisk = delta > 0;
-  const srcTotal = sellRisk ? riskTotal : defenseTotal;
-  const srcPrincipal = sellRisk ? riskPrincipal : defensePrincipal;
-  const sell = delta === 0 ? 0 : Math.min(Math.abs(delta), srcTotal);
-  if (sell <= 0) {
-    return { riskTotal, riskPrincipal, defenseTotal, defensePrincipal, info: null };
-  }
+  nisaRemainAnnual: number,
+  nisaRemainLifetime: number,
+): RebalanceTriResult {
+  const {
+    nisaTotal,
+    nisaPrincipal,
+    taxableRiskTotal,
+    taxableRiskPrincipal,
+    defenseTotal,
+    defensePrincipal,
+  } = state;
+  const riskSide = nisaTotal + taxableRiskTotal;
+  const total = riskSide + defenseTotal;
+  if (total <= 0) return { state, info: null };
+  const delta = defenseRatio * total - defenseTotal;
+  if (delta === 0) return { state, info: null };
 
-  const gainRatio = srcTotal > srcPrincipal ? (srcTotal - srcPrincipal) / srcTotal : 0;
-  const tax = sell * gainRatio * taxRate;
-  const proceeds = sell - tax;
-  const [newSrcTotal, newSrcPrincipal] = withdrawFromBucket(srcTotal, srcPrincipal, sell, taxRate);
+  if (delta > 0) {
+    const sellRequested = Math.min(delta, riskSide);
+    const [sellFromTaxable, sellFromNisa] = splitRiskSide(
+      sellRequested,
+      taxableRiskTotal,
+      nisaTotal,
+    );
 
-  const info: RebalanceInfo = {
-    direction: sellRisk ? "risk-to-defense" : "defense-to-risk",
-    sellAmount: sell,
-    taxAmount: tax,
-    proceeds,
-  };
+    const [newTaxableRiskTotal, newTaxableRiskPrincipal] = withdrawFromBucket(
+      taxableRiskTotal,
+      taxableRiskPrincipal,
+      sellFromTaxable,
+      taxRate,
+    );
+    const [newNisaTotal, newNisaPrincipal] = withdrawFromBucket(
+      nisaTotal,
+      nisaPrincipal,
+      sellFromNisa,
+      0,
+    );
+    // withdrawFromBucket: newTotal = total - sell - tax なので tax = total - newTotal - sell
+    const taxTaxable = taxableRiskTotal - newTaxableRiskTotal - sellFromTaxable;
+    const proceedsTaxable = sellFromTaxable - taxTaxable;
+    const proceeds = proceedsTaxable + sellFromNisa;
 
-  return sellRisk
-    ? {
-        riskTotal: newSrcTotal,
-        riskPrincipal: newSrcPrincipal,
+    return {
+      state: {
+        nisaTotal: newNisaTotal,
+        nisaPrincipal: newNisaPrincipal,
+        taxableRiskTotal: newTaxableRiskTotal,
+        taxableRiskPrincipal: newTaxableRiskPrincipal,
         defenseTotal: defenseTotal + proceeds,
         defensePrincipal: defensePrincipal + proceeds,
-        info,
-      }
-    : {
-        riskTotal: riskTotal + proceeds,
-        riskPrincipal: riskPrincipal + proceeds,
-        defenseTotal: newSrcTotal,
-        defensePrincipal: newSrcPrincipal,
-        info,
-      };
+      },
+      info: {
+        direction: "risk-to-defense",
+        sellAmount: sellRequested,
+        taxAmount: taxTaxable,
+        proceeds,
+        nisaUsed: 0,
+      },
+    };
+  }
+
+  const sell = Math.min(-delta, defenseTotal);
+  const [newDefenseTotal, newDefensePrincipal] = withdrawFromBucket(
+    defenseTotal,
+    defensePrincipal,
+    sell,
+    taxRate,
+  );
+  // newDefenseTotal = max(defenseTotal - sell - tax, 0) なので tax = defenseTotal - newDefenseTotal - sell
+  const tax = defenseTotal - newDefenseTotal - sell;
+  const proceeds = sell - tax;
+
+  const nisaCap = Math.max(0, Math.min(nisaRemainAnnual, nisaRemainLifetime));
+  const toNisa = Math.min(proceeds, nisaCap);
+  const toTaxable = proceeds - toNisa;
+
+  return {
+    state: {
+      nisaTotal: nisaTotal + toNisa,
+      nisaPrincipal: nisaPrincipal + toNisa,
+      taxableRiskTotal: taxableRiskTotal + toTaxable,
+      taxableRiskPrincipal: taxableRiskPrincipal + toTaxable,
+      defenseTotal: newDefenseTotal,
+      defensePrincipal: newDefensePrincipal,
+    },
+    info: {
+      direction: "defense-to-risk",
+      sellAmount: sell,
+      taxAmount: tax,
+      proceeds,
+      nisaUsed: toNisa,
+    },
+  };
+}
+
+// 特定リスク → NISA への振替実行（年初一括）。
+// 売却額のうち税引後 proceeds が targetProceeds を超えないよう sellAmount を調整する。
+// targetProceeds <= 0 か特定リスク残高ゼロなら何もしない。
+export function executeNisaTransfer(
+  taxableRiskTotal: number,
+  taxableRiskPrincipal: number,
+  nisaTotal: number,
+  nisaPrincipal: number,
+  targetProceeds: number,
+  taxRate: number,
+): {
+  taxableRiskTotal: number;
+  taxableRiskPrincipal: number;
+  nisaTotal: number;
+  nisaPrincipal: number;
+  info: NisaTransferInfo | null;
+} {
+  if (targetProceeds <= 0 || taxableRiskTotal <= 0) {
+    return { taxableRiskTotal, taxableRiskPrincipal, nisaTotal, nisaPrincipal, info: null };
+  }
+  const gainRatio =
+    taxableRiskTotal > taxableRiskPrincipal
+      ? (taxableRiskTotal - taxableRiskPrincipal) / taxableRiskTotal
+      : 0;
+  const denom = 1 - gainRatio * taxRate;
+  const sellRequested = denom > 0 ? targetProceeds / denom : targetProceeds;
+  const sellAmount = Math.min(sellRequested, taxableRiskTotal);
+  const [newTaxableRiskTotal, newTaxableRiskPrincipal] = withdrawFromBucket(
+    taxableRiskTotal,
+    taxableRiskPrincipal,
+    sellAmount,
+    taxRate,
+  );
+  const tax = taxableRiskTotal - newTaxableRiskTotal - sellAmount;
+  const proceeds = sellAmount - tax;
+  if (proceeds <= 0) {
+    return { taxableRiskTotal, taxableRiskPrincipal, nisaTotal, nisaPrincipal, info: null };
+  }
+  return {
+    taxableRiskTotal: newTaxableRiskTotal,
+    taxableRiskPrincipal: newTaxableRiskPrincipal,
+    nisaTotal: nisaTotal + proceeds,
+    nisaPrincipal: nisaPrincipal + proceeds,
+    info: { sellAmount, taxAmount: tax, proceeds },
+  };
 }
 
 export function calculateCompound(params: CalculateParams): CompoundResult {
   const {
-    initialAmount,
+    initialNisa,
+    initialNisaGain,
+    initialTaxableRisk,
+    initialTaxableRiskGain,
+    initialDefense,
+    initialDefenseGain,
     monthlyContribution,
     annualReturnRate,
     expenseRatio,
@@ -218,25 +380,25 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     monthlyWithdrawalFloor,
     monthlyWithdrawalCeiling,
     inflationAdjustedWithdrawal,
-    taxFree,
     basePension,
     pensionStartAge,
     currentAge,
     otherIncomes,
-    defenseRatio,
     defenseAnnualReturnRate,
     rebalanceThresholdPoint,
     defensePriorityOnDrawdown,
+    isCoupled,
+    nisaTransferEnabled,
+    nisaInitialLifetimeUsed,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
   const ri = inflationRate / 100;
   const monthlyInflationFactor = ri > 0 ? Math.pow(1 + ri, 1 / 12) : 1;
-  const taxRate = taxFree ? 0 : TAX_RATE;
+  const taxRate = TAX_RATE;
 
-  const dr = Math.max(0, Math.min(100, defenseRatio || 0)) / 100;
-  const contribRisk = monthlyContribution * (1 - dr);
-  const contribDefense = monthlyContribution * dr;
+  const nisaAnnualLimit = isCoupled ? NISA_ANNUAL_LIMIT * 2 : NISA_ANNUAL_LIMIT;
+  const nisaLifetimeLimit = isCoupled ? NISA_LIFETIME_LIMIT * 2 : NISA_LIFETIME_LIMIT;
 
   const realAnnualRateRisk = (annualReturnRate - expenseRatio) / 100;
   const monthlyRateRisk = Math.pow(1 + realAnnualRateRisk, 1 / 12) - 1;
@@ -247,10 +409,19 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
   const pensionStartYearOffset =
     basePension > 0 && currentAge != null ? Math.max(0, pensionStartAge - currentAge) : null;
 
-  let riskTotal = initialAmount * (1 - dr);
-  let defenseTotal = initialAmount * dr;
-  let riskPrincipal = riskTotal;
-  let defensePrincipal = defenseTotal;
+  let nisaTotal = initialNisa;
+  let nisaPrincipal = Math.max(0, initialNisa - initialNisaGain);
+  let taxableRiskTotal = initialTaxableRisk;
+  let taxableRiskPrincipal = Math.max(0, initialTaxableRisk - initialTaxableRiskGain);
+  let defenseTotal = initialDefense;
+  let defensePrincipal = Math.max(0, initialDefense - initialDefenseGain);
+
+  // defenseRatio は初期総資産から導出（リバランスの目標値として使う）
+  const initialTotal = nisaTotal + taxableRiskTotal + defenseTotal;
+  const dr = initialTotal > 0 ? defenseTotal / initialTotal : 0;
+
+  let lifetimeNisaUsed = Math.max(0, nisaInitialLifetimeUsed);
+
   let currentMonthlyWithdrawal = fixedMonthlyWithdrawal;
   let rateBasedMonthlyWithdrawal = 0;
   const isAnyRateMode = withdrawalMode === "rate" || withdrawalMode === "rate-risk";
@@ -262,13 +433,17 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     {
       year: 0,
       age: currentAge != null ? currentAge : null,
-      principal: Math.round(riskPrincipal + defensePrincipal),
+      principal: Math.round(nisaPrincipal + taxableRiskPrincipal + defensePrincipal),
       interest: 0,
       tax: 0,
-      total: Math.round(riskTotal + defenseTotal),
+      total: Math.round(nisaTotal + taxableRiskTotal + defenseTotal),
       yearlyWithdrawal: 0,
       yearlyPension: 0,
       yearlyOtherIncome: 0,
+      nisaTotal: Math.round(nisaTotal),
+      taxableRiskTotal: Math.round(taxableRiskTotal),
+      defenseTotal: Math.round(defenseTotal),
+      nisaLifetimeUsed: Math.round(lifetimeNisaUsed),
     },
   ];
   const monthlyArr: MonthlyProjection[] = [];
@@ -280,28 +455,67 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     let yearlyWithdrawal = 0;
     let yearlyPension = 0;
     let yearlyOtherIncome = 0;
+    let yearlyNisaUsed = 0;
 
     if (ri > 0) {
       if (currentMonthlyFloor !== null) currentMonthlyFloor *= 1 + ri;
       if (currentMonthlyCeiling !== null) currentMonthlyCeiling *= 1 + ri;
     }
 
+      // 月次積立の年間総額を年枠から先取りした残りを振替に充当する
+    let yearStartTransferInfo: NisaTransferInfo | null = null;
+    if (nisaTransferEnabled) {
+      const contributionThisYear = isContributing ? monthlyContribution * 12 : 0;
+      const annualForTransfer = Math.max(0, nisaAnnualLimit - contributionThisYear);
+      const lifetimeRemain = Math.max(0, nisaLifetimeLimit - lifetimeNisaUsed);
+      const targetProceeds = Math.min(annualForTransfer, lifetimeRemain);
+      if (targetProceeds > 0 && taxableRiskTotal > 0) {
+        const r = executeNisaTransfer(
+          taxableRiskTotal,
+          taxableRiskPrincipal,
+          nisaTotal,
+          nisaPrincipal,
+          targetProceeds,
+          taxRate,
+        );
+        taxableRiskTotal = r.taxableRiskTotal;
+        taxableRiskPrincipal = r.taxableRiskPrincipal;
+        nisaTotal = r.nisaTotal;
+        nisaPrincipal = r.nisaPrincipal;
+        if (r.info) {
+          yearStartTransferInfo = r.info;
+          yearlyNisaUsed += r.info.proceeds;
+          lifetimeNisaUsed += r.info.proceeds;
+        }
+      }
+    }
+
     for (let m = 0; m < 12; m++) {
-      const prevRisk = riskTotal;
+      const prevNisa = nisaTotal;
+      const prevTaxableRisk = taxableRiskTotal;
       const prevDefense = defenseTotal;
-      riskTotal *= 1 + monthlyRateRisk;
+      nisaTotal *= 1 + monthlyRateRisk;
+      taxableRiskTotal *= 1 + monthlyRateRisk;
       defenseTotal *= 1 + monthlyRateDefense;
-      const gainRisk = riskTotal - prevRisk;
+      const gainNisa = nisaTotal - prevNisa;
+      const gainTaxableRisk = taxableRiskTotal - prevTaxableRisk;
+      const gainRisk = gainNisa + gainTaxableRisk;
       const gainDefense = defenseTotal - prevDefense;
 
-      if (isContributing) {
-        riskTotal += contribRisk;
-        riskPrincipal += contribRisk;
-        defenseTotal += contribDefense;
-        defensePrincipal += contribDefense;
+      if (isContributing && monthlyContribution > 0) {
+        const annualRemain = Math.max(0, nisaAnnualLimit - yearlyNisaUsed);
+        const lifetimeRemain = Math.max(0, nisaLifetimeLimit - lifetimeNisaUsed);
+        const toNisa = Math.min(monthlyContribution, annualRemain, lifetimeRemain);
+        const toTaxable = monthlyContribution - toNisa;
+        nisaTotal += toNisa;
+        nisaPrincipal += toNisa;
+        taxableRiskTotal += toTaxable;
+        taxableRiskPrincipal += toTaxable;
+        yearlyNisaUsed += toNisa;
+        lifetimeNisaUsed += toNisa;
       }
 
-      const currentTotal = riskTotal + defenseTotal;
+      const currentTotal = nisaTotal + taxableRiskTotal + defenseTotal;
 
       let monthlyWithdrawal = 0;
       let monthPension = 0;
@@ -309,6 +523,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
 
       if (isWithdrawing && currentTotal > 0) {
         let baseWithdrawal: number;
+        const riskSide = nisaTotal + taxableRiskTotal;
         if (withdrawalMode === "rate") {
           if (m === 0 && year === withdrawalStartYear + 1) {
             rateBasedMonthlyWithdrawal = (currentTotal * withdrawalRate) / 100 / 12;
@@ -318,7 +533,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else if (withdrawalMode === "rate-risk") {
           if (m === 0) {
-            rateBasedMonthlyWithdrawal = (riskTotal * withdrawalRate) / 100 / 12;
+            rateBasedMonthlyWithdrawal = (riskSide * withdrawalRate) / 100 / 12;
           }
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else {
@@ -340,10 +555,26 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         const income = monthPension + monthOtherIncome;
         const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
-        const [fromRisk, fromDefense] = defensePriorityOnDrawdown
-          ? splitRiskFirst(netWithdrawal, riskTotal, defenseTotal)
-          : splitProportional(netWithdrawal, riskTotal, defenseTotal);
-        [riskTotal, riskPrincipal] = withdrawFromBucket(riskTotal, riskPrincipal, fromRisk, taxRate);
+        const [fromRiskSide, fromDefense] = defensePriorityOnDrawdown
+          ? splitRiskFirst(netWithdrawal, riskSide, defenseTotal)
+          : splitProportional(netWithdrawal, riskSide, defenseTotal);
+        const [fromTaxableRisk, fromNisa] = splitRiskSide(
+          fromRiskSide,
+          taxableRiskTotal,
+          nisaTotal,
+        );
+        [taxableRiskTotal, taxableRiskPrincipal] = withdrawFromBucket(
+          taxableRiskTotal,
+          taxableRiskPrincipal,
+          fromTaxableRisk,
+          taxRate,
+        );
+        [nisaTotal, nisaPrincipal] = withdrawFromBucket(
+          nisaTotal,
+          nisaPrincipal,
+          fromNisa,
+          0,
+        );
         [defenseTotal, defensePrincipal] = withdrawFromBucket(
           defenseTotal,
           defensePrincipal,
@@ -351,38 +582,57 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
           taxRate,
         );
 
-        monthlyWithdrawal = fromRisk + fromDefense;
+        monthlyWithdrawal = fromTaxableRisk + fromNisa + fromDefense;
         yearlyWithdrawal += monthlyWithdrawal;
         yearlyPension += monthPension;
         yearlyOtherIncome += monthOtherIncome;
       }
 
       let rebalanceInfo: RebalanceInfo | null = null;
-      if (dr > 0 && needsRebalance(riskTotal, defenseTotal, dr, rebalanceThresholdPoint)) {
-        const rb = rebalanceBuckets(
-          riskTotal,
-          riskPrincipal,
-          defenseTotal,
-          defensePrincipal,
-          dr,
-          taxRate,
-        );
-        riskTotal = rb.riskTotal;
-        riskPrincipal = rb.riskPrincipal;
-        defenseTotal = rb.defenseTotal;
-        defensePrincipal = rb.defensePrincipal;
-        rebalanceInfo = rb.info;
+      if (dr > 0) {
+        const riskSide = nisaTotal + taxableRiskTotal;
+        if (needsRebalance(riskSide, defenseTotal, dr, rebalanceThresholdPoint)) {
+          const annualRemain = Math.max(0, nisaAnnualLimit - yearlyNisaUsed);
+          const lifetimeRemain = Math.max(0, nisaLifetimeLimit - lifetimeNisaUsed);
+          const rb = rebalanceTriBuckets(
+            {
+              nisaTotal,
+              nisaPrincipal,
+              taxableRiskTotal,
+              taxableRiskPrincipal,
+              defenseTotal,
+              defensePrincipal,
+            },
+            dr,
+            taxRate,
+            annualRemain,
+            lifetimeRemain,
+          );
+          nisaTotal = rb.state.nisaTotal;
+          nisaPrincipal = rb.state.nisaPrincipal;
+          taxableRiskTotal = rb.state.taxableRiskTotal;
+          taxableRiskPrincipal = rb.state.taxableRiskPrincipal;
+          defenseTotal = rb.state.defenseTotal;
+          defensePrincipal = rb.state.defensePrincipal;
+          rebalanceInfo = rb.info;
+          if (rb.info && rb.info.nisaUsed > 0) {
+            yearlyNisaUsed += rb.info.nisaUsed;
+            lifetimeNisaUsed += rb.info.nisaUsed;
+          }
+        }
       }
 
-      const prevTotal = prevRisk + prevDefense;
+      const prevTotal = prevNisa + prevTaxableRisk + prevDefense;
       const monthlyRate = prevTotal > 0 ? (gainRisk + gainDefense) / prevTotal : 0;
       monthlyArr.push({
         year,
         month: m + 1,
         age: currentAge != null ? currentAge + year : null,
-        riskTotal: Math.round(riskTotal),
+        nisaTotal: Math.round(nisaTotal),
+        taxableRiskTotal: Math.round(taxableRiskTotal),
+        riskTotal: Math.round(nisaTotal + taxableRiskTotal),
         defenseTotal: Math.round(defenseTotal),
-        total: Math.round(riskTotal + defenseTotal),
+        total: Math.round(nisaTotal + taxableRiskTotal + defenseTotal),
         monthlyWithdrawal: Math.round(monthlyWithdrawal),
         monthlyPension: Math.round(monthPension),
         monthlyOtherIncome: Math.round(monthOtherIncome),
@@ -391,26 +641,37 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         monthlyGain: Math.round(gainRisk + gainDefense),
         monthlyRate,
         rebalanceInfo,
+        nisaTransferInfo: m === 0 ? yearStartTransferInfo : null,
       });
     }
 
-    // tax: 年末時点でまだ売却していない含み益に対する「もし全部売却したら」の試算税。
+    // tax: 年末時点でまだ売却していない含み益に対する「もし全部売却したら」の試算税。NISA分は除外。
     // 月次ループ中に取り崩しと共に発生した課税分は currentTotal から既に控除済み。
-    const endTotal = riskTotal + defenseTotal;
-    const endPrincipal = riskPrincipal + defensePrincipal;
-    const interest = endTotal - endPrincipal;
-    const tax = interest > 0 ? Math.round(interest * taxRate) : 0;
+    const endTaxable = taxableRiskTotal + defenseTotal;
+    const endTaxablePrincipal = taxableRiskPrincipal + defensePrincipal;
+    const endNisa = nisaTotal;
+    const endNisaPrincipal = nisaPrincipal;
+    const endTotal = endTaxable + endNisa;
+    const endPrincipal = endTaxablePrincipal + endNisaPrincipal;
+    const taxableGain = endTaxable - endTaxablePrincipal;
+    const nisaGain = endNisa - endNisaPrincipal;
+    const tax = taxableGain > 0 ? Math.round(taxableGain * taxRate) : 0;
+    const totalInterest = (taxableGain > 0 ? taxableGain : 0) + (nisaGain > 0 ? nisaGain : 0);
     const afterTaxTotal = Math.max(endTotal - tax, 0);
     projections.push({
       year,
       age: currentAge != null ? currentAge + year : null,
       principal: Math.round(endPrincipal),
-      interest: interest > 0 ? Math.round(interest - tax) : 0,
+      interest: totalInterest > 0 ? Math.round(totalInterest - tax) : 0,
       tax,
       total: Math.round(afterTaxTotal),
       yearlyWithdrawal: Math.round(yearlyWithdrawal),
       yearlyPension: Math.round(yearlyPension),
       yearlyOtherIncome: Math.round(yearlyOtherIncome),
+      nisaTotal: Math.round(nisaTotal),
+      taxableRiskTotal: Math.round(taxableRiskTotal),
+      defenseTotal: Math.round(defenseTotal),
+      nisaLifetimeUsed: Math.round(lifetimeNisaUsed),
     });
   }
 

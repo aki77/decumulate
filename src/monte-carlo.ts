@@ -1,13 +1,17 @@
 // モンテカルロ・シミュレーション（GBM、5000パス）
 // 実質値（インフレ控除後）で計算。再現性のため Mulberry32 + Box-Muller を使用。
+// 口座構造: NISA(非課税) / 特定リスク(課税) / 防衛(課税) の3バケット
 import { adjustedMonthlyPension } from "./pension.ts";
 import {
   TAX_RATE,
+  NISA_ANNUAL_LIMIT,
+  NISA_LIFETIME_LIMIT,
   clampToBounds,
+  executeNisaTransfer,
   needsRebalance,
-  rebalanceBuckets,
   type CalculateParams,
   type MonthlyProjection,
+  type NisaTransferInfo,
   type RebalanceInfo,
 } from "./calculate.ts";
 import { sumOtherIncomeAt } from "./other-income.ts";
@@ -80,7 +84,12 @@ function normalRandom(rng: () => number): number {
 
 export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const {
-    initialAmount,
+    initialNisa,
+    initialNisaGain,
+    initialTaxableRisk,
+    initialTaxableRiskGain,
+    initialDefense,
+    initialDefenseGain,
     monthlyContribution,
     annualReturnRate,
     expenseRatio,
@@ -95,28 +104,31 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     monthlyWithdrawalFloor,
     monthlyWithdrawalCeiling,
     inflationAdjustedWithdrawal,
-    taxFree,
     basePension,
     pensionStartAge,
     currentAge,
     otherIncomes,
-    defenseRatio,
     defenseAnnualReturnRate,
     defenseVolatility,
     defensePriorityOnDrawdown,
     drawdownThresholdPercent,
     rebalanceThresholdPoint,
     skipRebalanceOnDrawdown,
+    isCoupled,
+    nisaTransferEnabled,
+    nisaInitialLifetimeUsed,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
   const ri = inflationRate / 100;
-  const taxRate = taxFree ? 0 : TAX_RATE;
+  const taxRate = TAX_RATE;
 
-  const dr = Math.max(0, Math.min(100, defenseRatio || 0)) / 100;
+  const initialTotal = initialNisa + initialTaxableRisk + initialDefense;
+  const dr = initialTotal > 0 ? initialDefense / initialTotal : 0;
   const useDefense = dr > 0;
-  const contribRisk = monthlyContribution * (1 - dr);
-  const contribDefense = monthlyContribution * dr;
+
+  const nisaAnnualLimit = isCoupled ? NISA_ANNUAL_LIMIT * 2 : NISA_ANNUAL_LIMIT;
+  const nisaLifetimeLimit = isCoupled ? NISA_LIFETIME_LIMIT * 2 : NISA_LIFETIME_LIMIT;
 
   const muRisk = (annualReturnRate - expenseRatio) / 100;
   const sigmaRisk = volatility / 100;
@@ -155,8 +167,10 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       : 1;
 
   const N = NUM_SIMULATIONS;
-  const initialRisk = initialAmount * (1 - dr);
-  const initialDefense = initialAmount * dr;
+  const initialNisaPrincipalValue = Math.max(0, initialNisa - initialNisaGain);
+  const initialTaxableRiskPrincipalValue = Math.max(0, initialTaxableRisk - initialTaxableRiskGain);
+  const initialDefensePrincipalValue = Math.max(0, initialDefense - initialDefenseGain);
+  const initialRiskSide = initialNisa + initialTaxableRisk;
 
   // 本体ループを内部関数化している理由: pivotMask=null（フェーズ1）と pivotMask=非null（フェーズ2）の
   // 間で RNG 消費順序を完全に揃えることで、両フェーズが同じパスを生成し再現性を保つ。
@@ -186,17 +200,22 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     return out;
   };
   const rng = mulberry32(SEED);
-  const riskPaths = new Float64Array(N).fill(initialRisk);
+  const nisaPaths = new Float64Array(N).fill(initialNisa);
+  const nisaCostBasis = new Float64Array(N).fill(initialNisaPrincipalValue);
+  const taxablePaths = new Float64Array(N).fill(initialTaxableRisk);
+  const taxableCostBasis = new Float64Array(N).fill(initialTaxableRiskPrincipalValue);
   const defensePaths = useDefense ? new Float64Array(N).fill(initialDefense) : null;
-  const riskCostBasis = new Float64Array(N).fill(initialRisk);
-  const defenseCostBasis = useDefense ? new Float64Array(N).fill(initialDefense) : null;
-  const riskHWM = priorityOnDrawdown ? new Float64Array(N).fill(initialRisk) : null;
+  const defenseCostBasis = useDefense ? new Float64Array(N).fill(initialDefensePrincipalValue) : null;
+  // 下落判定は「リスクサイド合計」のHWMで判断する
+  const riskSideHWM = priorityOnDrawdown ? new Float64Array(N).fill(initialRiskSide) : null;
   const cumulativeWithdrawals = new Float64Array(N);
   const rateBasedMonthlyWithdrawal = new Float64Array(N);
   const rateWithdrawalInitialized = new Uint8Array(N);
   const currentMonthlyWithdrawal = new Float64Array(N).fill(
     fixedMonthlyWithdrawal * preWithdrawalDeflation,
   );
+  const lifetimeNisaUsed = new Float64Array(N).fill(Math.max(0, nisaInitialLifetimeUsed));
+  const yearlyNisaUsed = new Float64Array(N);
   const totalPaths = new Float64Array(N);
   const pivotMonthlies: PivotMonthlies = {
     p10: [],
@@ -211,9 +230,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     raw: {
       year: number;
       month: number;
-      prevRisk: number;
+      prevNisa: number;
+      prevTaxable: number;
       prevDefense: number;
-      riskTotal: number;
+      nisaTotal: number;
+      taxableRiskTotal: number;
       defenseTotal: number;
       monthlyWithdrawal: number;
       monthlyPension: number;
@@ -221,18 +242,21 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       monthlyGainRisk: number;
       monthlyGainDefense: number;
       rebalanceInfo: RebalanceInfo | null;
+      nisaTransferInfo: NisaTransferInfo | null;
     },
   ): void => {
-    const prevTotal = raw.prevRisk + raw.prevDefense;
+    const prevTotal = raw.prevNisa + raw.prevTaxable + raw.prevDefense;
     const monthlyRate =
       prevTotal > 0 ? (raw.monthlyGainRisk + raw.monthlyGainDefense) / prevTotal : 0;
     const row: MonthlyProjection = {
       year: raw.year,
       month: raw.month,
       age: currentAge != null ? currentAge + raw.year : null,
-      riskTotal: Math.round(raw.riskTotal),
+      nisaTotal: Math.round(raw.nisaTotal),
+      taxableRiskTotal: Math.round(raw.taxableRiskTotal),
+      riskTotal: Math.round(raw.nisaTotal + raw.taxableRiskTotal),
       defenseTotal: Math.round(raw.defenseTotal),
-      total: Math.round(raw.riskTotal + raw.defenseTotal),
+      total: Math.round(raw.nisaTotal + raw.taxableRiskTotal + raw.defenseTotal),
       monthlyWithdrawal: Math.round(raw.monthlyWithdrawal),
       monthlyPension: Math.round(raw.monthlyPension),
       monthlyOtherIncome: Math.round(raw.monthlyOtherIncome),
@@ -241,6 +265,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       monthlyGain: Math.round(raw.monthlyGainRisk + raw.monthlyGainDefense),
       monthlyRate,
       rebalanceInfo: raw.rebalanceInfo,
+      nisaTransferInfo: raw.nisaTransferInfo,
     };
     for (const k of keys) pivotMonthlies[k].push(row);
   };
@@ -249,11 +274,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     {
       year: 0,
       age: currentAge != null ? currentAge : null,
-      p10: initialAmount,
-      p25: initialAmount,
-      p50: initialAmount,
-      p75: initialAmount,
-      p90: initialAmount,
+      p10: initialTotal,
+      p25: initialTotal,
+      p50: initialTotal,
+      p75: initialTotal,
+      p90: initialTotal,
       depletionRate: 0,
       medianYearlyWithdrawal: 0,
     },
@@ -277,6 +302,35 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     const monthOtherIncomeForYear = otherIncomePerYear[year]!;
     const yearlyWithdrawals = new Float64Array(N);
 
+    yearlyNisaUsed.fill(0);
+
+    // 年初一括NISA振替（各パスで実行）。N×Y 回 = ホットループ外なので executeNisaTransfer を再利用。
+    if (nisaTransferEnabled) {
+      const contributionThisYear = isContributing ? monthlyContribution * 12 : 0;
+      const annualForTransfer = Math.max(0, nisaAnnualLimit - contributionThisYear);
+      for (let i = 0; i < N; i++) {
+        const lifetimeRemain = Math.max(0, nisaLifetimeLimit - lifetimeNisaUsed[i]!);
+        const targetProceeds = Math.min(annualForTransfer, lifetimeRemain);
+        if (targetProceeds <= 0 || taxablePaths[i]! <= 0) continue;
+        const r = executeNisaTransfer(
+          taxablePaths[i]!,
+          taxableCostBasis[i]!,
+          nisaPaths[i]!,
+          nisaCostBasis[i]!,
+          targetProceeds,
+          taxRate,
+        );
+        taxablePaths[i] = r.taxableRiskTotal;
+        taxableCostBasis[i] = r.taxableRiskPrincipal;
+        nisaPaths[i] = r.nisaTotal;
+        nisaCostBasis[i] = r.nisaPrincipal;
+        if (r.info) {
+          yearlyNisaUsed[i]! += r.info.proceeds;
+          lifetimeNisaUsed[i]! += r.info.proceeds;
+        }
+      }
+    }
+
     // rate モードでは年頭にインフレ調整。決定論と挙動を揃える。
     if (isWithdrawing && isRateMode) {
       for (let i = 0; i < N; i++) {
@@ -289,250 +343,277 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     for (let m = 0; m < 12; m++) {
       const isWithdrawalStartMonth = isFirstWithdrawalYear && m === 0;
 
-      if (useDefense && defensePaths !== null && defenseCostBasis !== null) {
-        for (let i = 0; i < N; i++) {
-          const pivotMask = pivotMaskByIndex !== null ? pivotMaskByIndex[i]! : 0;
-          const recordPivot = pivotMask !== 0;
-          const prevRisk = riskPaths[i]!;
-          const prevDefense = defensePaths[i]!;
+      for (let i = 0; i < N; i++) {
+        const pivotMask = pivotMaskByIndex !== null ? pivotMaskByIndex[i]! : 0;
+        const recordPivot = pivotMask !== 0;
+        const prevNisa = nisaPaths[i]!;
+        const prevTaxable = taxablePaths[i]!;
+        const prevDefense = useDefense && defensePaths !== null ? defensePaths[i]! : 0;
 
-          const zRisk = normalRandom(rng);
-          riskPaths[i]! *= Math.exp(monthlyDriftRisk + monthlySigmaRisk * zRisk);
+        const zRisk = normalRandom(rng);
+        const riskGrow = Math.exp(monthlyDriftRisk + monthlySigmaRisk * zRisk);
+        nisaPaths[i]! *= riskGrow;
+        taxablePaths[i]! *= riskGrow;
+        let gainDefense = 0;
+        if (useDefense && defensePaths !== null) {
           const zDef = normalRandom(rng);
           defensePaths[i]! *= Math.exp(monthlyDriftDef + monthlySigmaDef * zDef);
+          gainDefense = defensePaths[i]! - prevDefense;
+        }
 
-          const gainRisk = riskPaths[i]! - prevRisk;
-          const gainDefense = defensePaths[i]! - prevDefense;
-          let monthlyWithdrawalRecorded = 0;
-          let pensionRecorded = 0;
-          let otherIncomeRecorded = 0;
-          let rebalanceInfoRecorded: RebalanceInfo | null = null;
+        const gainNisa = nisaPaths[i]! - prevNisa;
+        const gainTaxable = taxablePaths[i]! - prevTaxable;
+        const gainRisk = gainNisa + gainTaxable;
+        let monthlyWithdrawalRecorded = 0;
+        let pensionRecorded = 0;
+        let otherIncomeRecorded = 0;
+        let rebalanceInfoRecorded: RebalanceInfo | null = null;
 
-          if (isContributing) {
-            riskPaths[i]! += contribRisk;
-            riskCostBasis[i]! += contribRisk;
-            defensePaths[i]! += contribDefense;
-            defenseCostBasis[i]! += contribDefense;
-          }
+        if (isContributing && monthlyContribution > 0) {
+          const annualRemain = Math.max(0, nisaAnnualLimit - yearlyNisaUsed[i]!);
+          const lifetimeRemain = Math.max(0, nisaLifetimeLimit - lifetimeNisaUsed[i]!);
+          const toNisa = Math.min(monthlyContribution, annualRemain, lifetimeRemain);
+          const toTaxable = monthlyContribution - toNisa;
+          nisaPaths[i]! += toNisa;
+          nisaCostBasis[i]! += toNisa;
+          taxablePaths[i]! += toTaxable;
+          taxableCostBasis[i]! += toTaxable;
+          yearlyNisaUsed[i]! += toNisa;
+          lifetimeNisaUsed[i]! += toNisa;
+        }
 
-          // 積立期のピーク値を引きずらないよう、取り崩し開始月に高値基準（HWM）を再初期化する
-          if (priorityOnDrawdown && riskHWM !== null) {
-            if (isWithdrawalStartMonth) {
-              riskHWM[i] = riskPaths[i]!;
-            } else if (isWithdrawing && riskPaths[i]! > riskHWM[i]!) {
-              riskHWM[i] = riskPaths[i]!;
-            }
-          }
+        const riskSide = nisaPaths[i]! + taxablePaths[i]!;
+        const defenseValue = useDefense && defensePaths !== null ? defensePaths[i]! : 0;
 
-          const total = riskPaths[i]! + defensePaths[i]!;
-          const inDrawdown =
-            checkDrawdown &&
-            riskHWM !== null &&
-            riskHWM[i]! > 0 &&
-            1 - riskPaths[i]! / riskHWM[i]! >= drawdownThreshold;
-
-          if (isWithdrawing && total > 0) {
-            let baseWithdrawal: number;
-            if (isRateMode) {
-              if (!rateWithdrawalInitialized[i]) {
-                rateBasedMonthlyWithdrawal[i] = (total * withdrawalRate) / 100 / 12;
-                rateWithdrawalInitialized[i] = 1;
-              }
-              baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
-            } else if (isRateRiskMode) {
-              if (m === 0) {
-                rateBasedMonthlyWithdrawal[i] = (riskPaths[i]! * withdrawalRate) / 100 / 12;
-              }
-              baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
-            } else {
-              baseWithdrawal = currentMonthlyWithdrawal[i]!;
-            }
-
-            if (isAnyRateMode) {
-              baseWithdrawal = clampToBounds(baseWithdrawal, floorReal, ceilingReal);
-            }
-
-            const income = monthPension + monthOtherIncomeForYear;
-            const netWithdrawal = Math.max(baseWithdrawal - income, 0);
-
-            if (recordPivot) {
-              pensionRecorded = monthPension;
-              otherIncomeRecorded = monthOtherIncomeForYear;
-            }
-
-            if (netWithdrawal > 0) {
-              let fromRisk: number;
-              let fromDefense: number;
-              if (inDrawdown && defensePaths[i]! > 0) {
-                fromDefense = Math.min(netWithdrawal, defensePaths[i]!);
-                fromRisk = netWithdrawal - fromDefense;
-              } else if (priorityOnDrawdown && riskPaths[i]! > 0) {
-                fromRisk = Math.min(netWithdrawal, riskPaths[i]!);
-                fromDefense = netWithdrawal - fromRisk;
-              } else {
-                fromRisk = netWithdrawal * (riskPaths[i]! / total);
-                fromDefense = netWithdrawal * (defensePaths[i]! / total);
-              }
-              // 片方が枯渇した分は他方に回す
-              if (fromRisk > riskPaths[i]!) {
-                fromDefense += fromRisk - riskPaths[i]!;
-                fromRisk = riskPaths[i]!;
-              }
-              if (fromDefense > defensePaths[i]!) {
-                fromRisk += fromDefense - defensePaths[i]!;
-                fromDefense = defensePaths[i]!;
-              }
-              if (fromRisk > riskPaths[i]!) fromRisk = riskPaths[i]!;
-              if (fromDefense > defensePaths[i]!) fromDefense = defensePaths[i]!;
-
-              let drawnTotal = 0;
-              if (fromRisk > 0) {
-                const gainRatio =
-                  riskPaths[i]! > riskCostBasis[i]!
-                    ? (riskPaths[i]! - riskCostBasis[i]!) / riskPaths[i]!
-                    : 0;
-                const tax = fromRisk * gainRatio * taxRate;
-                riskCostBasis[i]! *= 1 - Math.min(fromRisk / riskPaths[i]!, 1);
-                riskPaths[i]! -= fromRisk + tax;
-                if (riskPaths[i]! < 0) riskPaths[i] = 0;
-                drawnTotal += fromRisk;
-              }
-              if (fromDefense > 0) {
-                const gainRatio =
-                  defensePaths[i]! > defenseCostBasis[i]!
-                    ? (defensePaths[i]! - defenseCostBasis[i]!) / defensePaths[i]!
-                    : 0;
-                const tax = fromDefense * gainRatio * taxRate;
-                defenseCostBasis[i]! *= 1 - Math.min(fromDefense / defensePaths[i]!, 1);
-                defensePaths[i]! -= fromDefense + tax;
-                if (defensePaths[i]! < 0) defensePaths[i] = 0;
-                drawnTotal += fromDefense;
-              }
-
-              cumulativeWithdrawals[i]! += drawnTotal;
-              yearlyWithdrawals[i]! += drawnTotal;
-              if (recordPivot) monthlyWithdrawalRecorded = drawnTotal;
-            }
-          }
-
-          const shouldSkipRebalance = skipRebalanceWhenDrawdown && inDrawdown;
-          if (
-            !shouldSkipRebalance &&
-            needsRebalance(riskPaths[i]!, defensePaths[i]!, dr, rebalanceThresholdPoint)
-          ) {
-            const rb = rebalanceBuckets(
-              riskPaths[i]!,
-              riskCostBasis[i]!,
-              defensePaths[i]!,
-              defenseCostBasis[i]!,
-              dr,
-              taxRate,
-            );
-            riskPaths[i] = rb.riskTotal;
-            riskCostBasis[i] = rb.riskPrincipal;
-            defensePaths[i] = rb.defenseTotal;
-            defenseCostBasis[i] = rb.defensePrincipal;
-            if (recordPivot) rebalanceInfoRecorded = rb.info;
-          }
-
-          if (recordPivot) {
-            pushPivotRow(keysForMask(pivotMask), {
-              year,
-              month: m + 1,
-              prevRisk,
-              prevDefense,
-              riskTotal: riskPaths[i]!,
-              defenseTotal: defensePaths[i]!,
-              monthlyWithdrawal: monthlyWithdrawalRecorded,
-              monthlyPension: pensionRecorded,
-              monthlyOtherIncome: otherIncomeRecorded,
-              monthlyGainRisk: gainRisk,
-              monthlyGainDefense: gainDefense,
-              rebalanceInfo: rebalanceInfoRecorded,
-            });
+        // 積立期のピーク値を引きずらないよう、取り崩し開始月に高値基準（HWM）を再初期化する
+        if (priorityOnDrawdown && riskSideHWM !== null) {
+          if (isWithdrawalStartMonth) {
+            riskSideHWM[i] = riskSide;
+          } else if (isWithdrawing && riskSide > riskSideHWM[i]!) {
+            riskSideHWM[i] = riskSide;
           }
         }
-      } else {
-        for (let i = 0; i < N; i++) {
-          const pivotMask = pivotMaskByIndex !== null ? pivotMaskByIndex[i]! : 0;
-          const recordPivot = pivotMask !== 0;
-          const prevRisk = riskPaths[i]!;
 
-          const z = normalRandom(rng);
-          riskPaths[i]! *= Math.exp(monthlyDriftRisk + monthlySigmaRisk * z);
+        const total = riskSide + defenseValue;
+        const inDrawdown =
+          checkDrawdown &&
+          riskSideHWM !== null &&
+          riskSideHWM[i]! > 0 &&
+          1 - riskSide / riskSideHWM[i]! >= drawdownThreshold;
 
-          const gainRisk = riskPaths[i]! - prevRisk;
-          let monthlyWithdrawalRecorded = 0;
-          let pensionRecorded = 0;
-          let otherIncomeRecorded = 0;
-
-          if (isContributing) {
-            riskPaths[i]! += contribRisk;
-            riskCostBasis[i]! += contribRisk;
+        if (isWithdrawing && total > 0) {
+          let baseWithdrawal: number;
+          if (isRateMode) {
+            if (!rateWithdrawalInitialized[i]) {
+              rateBasedMonthlyWithdrawal[i] = (total * withdrawalRate) / 100 / 12;
+              rateWithdrawalInitialized[i] = 1;
+            }
+            baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
+          } else if (isRateRiskMode) {
+            if (m === 0) {
+              rateBasedMonthlyWithdrawal[i] = (riskSide * withdrawalRate) / 100 / 12;
+            }
+            baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
+          } else {
+            baseWithdrawal = currentMonthlyWithdrawal[i]!;
           }
 
-          if (isWithdrawing && riskPaths[i]! > 0) {
-            let baseWithdrawal: number;
-            if (isRateMode) {
-              if (!rateWithdrawalInitialized[i]) {
-                rateBasedMonthlyWithdrawal[i] = (riskPaths[i]! * withdrawalRate) / 100 / 12;
-                rateWithdrawalInitialized[i] = 1;
-              }
-              baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
-            } else if (isRateRiskMode) {
-              if (m === 0) {
-                rateBasedMonthlyWithdrawal[i] = (riskPaths[i]! * withdrawalRate) / 100 / 12;
-              }
-              baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
-            } else {
-              baseWithdrawal = currentMonthlyWithdrawal[i]!;
-            }
-
-            if (isAnyRateMode) {
-              baseWithdrawal = clampToBounds(baseWithdrawal, floorReal, ceilingReal);
-            }
-
-            const income = monthPension + monthOtherIncomeForYear;
-            const netWithdrawal = Math.max(baseWithdrawal - income, 0);
-
-            if (recordPivot) {
-              pensionRecorded = monthPension;
-              otherIncomeRecorded = monthOtherIncomeForYear;
-            }
-
-            if (netWithdrawal > 0) {
-              const gainRatio =
-                riskPaths[i]! > riskCostBasis[i]!
-                  ? (riskPaths[i]! - riskCostBasis[i]!) / riskPaths[i]!
-                  : 0;
-              const tax = netWithdrawal * gainRatio * taxRate;
-              const ratio = Math.min(netWithdrawal / riskPaths[i]!, 1);
-              riskCostBasis[i]! *= 1 - ratio;
-              riskPaths[i]! -= netWithdrawal + tax;
-              if (riskPaths[i]! < 0) riskPaths[i] = 0;
-
-              cumulativeWithdrawals[i]! += netWithdrawal;
-              yearlyWithdrawals[i]! += netWithdrawal;
-              if (recordPivot) monthlyWithdrawalRecorded = netWithdrawal;
-            }
+          if (isAnyRateMode) {
+            baseWithdrawal = clampToBounds(baseWithdrawal, floorReal, ceilingReal);
           }
+
+          const income = monthPension + monthOtherIncomeForYear;
+          const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
           if (recordPivot) {
-            pushPivotRow(keysForMask(pivotMask), {
-              year,
-              month: m + 1,
-              prevRisk,
-              prevDefense: 0,
-              riskTotal: riskPaths[i]!,
-              defenseTotal: 0,
-              monthlyWithdrawal: monthlyWithdrawalRecorded,
-              monthlyPension: pensionRecorded,
-              monthlyOtherIncome: otherIncomeRecorded,
-              monthlyGainRisk: gainRisk,
-              monthlyGainDefense: 0,
-              rebalanceInfo: null,
-            });
+            pensionRecorded = monthPension;
+            otherIncomeRecorded = monthOtherIncomeForYear;
           }
+
+          if (netWithdrawal > 0) {
+            let fromRiskSide: number;
+            let fromDefense: number;
+            if (useDefense && defensePaths !== null) {
+              if (inDrawdown && defenseValue > 0) {
+                fromDefense = Math.min(netWithdrawal, defenseValue);
+                fromRiskSide = netWithdrawal - fromDefense;
+              } else if (priorityOnDrawdown && riskSide > 0) {
+                fromRiskSide = Math.min(netWithdrawal, riskSide);
+                fromDefense = netWithdrawal - fromRiskSide;
+              } else {
+                fromRiskSide = netWithdrawal * (riskSide / total);
+                fromDefense = netWithdrawal * (defenseValue / total);
+              }
+              if (fromRiskSide > riskSide) {
+                fromDefense += fromRiskSide - riskSide;
+                fromRiskSide = riskSide;
+              }
+              if (fromDefense > defenseValue) {
+                fromRiskSide += fromDefense - defenseValue;
+                fromDefense = defenseValue;
+              }
+              if (fromRiskSide > riskSide) fromRiskSide = riskSide;
+              if (fromDefense > defenseValue) fromDefense = defenseValue;
+            } else {
+              fromRiskSide = Math.min(netWithdrawal, riskSide);
+              fromDefense = 0;
+            }
+
+            const fromTaxable = Math.min(fromRiskSide, Math.max(taxablePaths[i]!, 0));
+            const fromNisa = Math.min(fromRiskSide - fromTaxable, Math.max(nisaPaths[i]!, 0));
+
+            let drawnTotal = 0;
+            if (fromTaxable > 0) {
+              const taxableTotal = taxablePaths[i]!;
+              const taxablePrincipal = taxableCostBasis[i]!;
+              const gainRatio =
+                taxableTotal > taxablePrincipal
+                  ? (taxableTotal - taxablePrincipal) / taxableTotal
+                  : 0;
+              const tax = fromTaxable * gainRatio * taxRate;
+              taxableCostBasis[i]! *= 1 - Math.min(fromTaxable / taxableTotal, 1);
+              taxablePaths[i]! -= fromTaxable + tax;
+              if (taxablePaths[i]! < 0) taxablePaths[i] = 0;
+              drawnTotal += fromTaxable;
+            }
+            if (fromNisa > 0) {
+              const nisaTotalLocal = nisaPaths[i]!;
+              nisaCostBasis[i]! *= 1 - Math.min(fromNisa / nisaTotalLocal, 1);
+              nisaPaths[i]! -= fromNisa;
+              if (nisaPaths[i]! < 0) nisaPaths[i] = 0;
+              drawnTotal += fromNisa;
+            }
+            if (fromDefense > 0 && useDefense && defensePaths !== null && defenseCostBasis !== null) {
+              const defTotal = defensePaths[i]!;
+              const defPrincipal = defenseCostBasis[i]!;
+              const gainRatio =
+                defTotal > defPrincipal ? (defTotal - defPrincipal) / defTotal : 0;
+              const tax = fromDefense * gainRatio * taxRate;
+              defenseCostBasis[i]! *= 1 - Math.min(fromDefense / defTotal, 1);
+              defensePaths[i]! -= fromDefense + tax;
+              if (defensePaths[i]! < 0) defensePaths[i] = 0;
+              drawnTotal += fromDefense;
+            }
+
+            cumulativeWithdrawals[i]! += drawnTotal;
+            yearlyWithdrawals[i]! += drawnTotal;
+            if (recordPivot) monthlyWithdrawalRecorded = drawnTotal;
+          }
+        }
+
+        const shouldSkipRebalance = skipRebalanceWhenDrawdown && inDrawdown;
+        if (
+          useDefense &&
+          defensePaths !== null &&
+          defenseCostBasis !== null &&
+          !shouldSkipRebalance &&
+          needsRebalance(
+            nisaPaths[i]! + taxablePaths[i]!,
+            defensePaths[i]!,
+            dr,
+            rebalanceThresholdPoint,
+          )
+        ) {
+          const nisaTotalLocal = nisaPaths[i]!;
+          const taxableTotalLocal = taxablePaths[i]!;
+          const taxablePrincipalLocal = taxableCostBasis[i]!;
+          const defenseTotalLocal = defensePaths[i]!;
+          const defensePrincipalLocal = defenseCostBasis[i]!;
+          const riskSideLocal = nisaTotalLocal + taxableTotalLocal;
+          const totalLocal = riskSideLocal + defenseTotalLocal;
+          const targetDefense = dr * totalLocal;
+          const delta = targetDefense - defenseTotalLocal;
+
+          if (delta > 0) {
+            const sellRequested = Math.min(delta, riskSideLocal);
+            const sellFromTaxable = Math.min(sellRequested, taxableTotalLocal);
+            const sellFromNisa = sellRequested - sellFromTaxable;
+            const gainRatioTaxable =
+              taxableTotalLocal > taxablePrincipalLocal
+                ? (taxableTotalLocal - taxablePrincipalLocal) / taxableTotalLocal
+                : 0;
+            const taxTaxable = sellFromTaxable * gainRatioTaxable * taxRate;
+            const proceedsTaxable = sellFromTaxable - taxTaxable;
+            const proceedsNisa = sellFromNisa;
+            const proceeds = proceedsTaxable + proceedsNisa;
+
+            if (sellFromTaxable > 0) {
+              taxableCostBasis[i]! *=
+                1 - Math.min(sellFromTaxable / taxableTotalLocal, 1);
+              taxablePaths[i]! = Math.max(taxableTotalLocal - sellFromTaxable - taxTaxable, 0);
+            }
+            if (sellFromNisa > 0) {
+              nisaCostBasis[i]! *= 1 - Math.min(sellFromNisa / nisaTotalLocal, 1);
+              nisaPaths[i]! = Math.max(nisaTotalLocal - sellFromNisa, 0);
+            }
+            defensePaths[i]! = defenseTotalLocal + proceeds;
+            defenseCostBasis[i]! = defensePrincipalLocal + proceeds;
+            if (recordPivot) {
+              rebalanceInfoRecorded = {
+                direction: "risk-to-defense",
+                sellAmount: sellRequested,
+                taxAmount: taxTaxable,
+                proceeds,
+                nisaUsed: 0,
+              };
+            }
+          } else if (delta < 0) {
+            const sell = Math.min(-delta, defenseTotalLocal);
+            const gainRatioDef =
+              defenseTotalLocal > defensePrincipalLocal
+                ? (defenseTotalLocal - defensePrincipalLocal) / defenseTotalLocal
+                : 0;
+            const tax = sell * gainRatioDef * taxRate;
+            const proceeds = sell - tax;
+
+            defenseCostBasis[i]! *= 1 - Math.min(sell / defenseTotalLocal, 1);
+            defensePaths[i]! = Math.max(defenseTotalLocal - sell - tax, 0);
+
+            const annualRemain = Math.max(0, nisaAnnualLimit - yearlyNisaUsed[i]!);
+            const lifetimeRemain = Math.max(0, nisaLifetimeLimit - lifetimeNisaUsed[i]!);
+            const nisaCap = Math.min(annualRemain, lifetimeRemain);
+            const toNisa = Math.min(proceeds, nisaCap);
+            const toTaxable = proceeds - toNisa;
+
+            nisaPaths[i]! += toNisa;
+            nisaCostBasis[i]! += toNisa;
+            taxablePaths[i]! += toTaxable;
+            taxableCostBasis[i]! += toTaxable;
+            if (toNisa > 0) {
+              yearlyNisaUsed[i]! += toNisa;
+              lifetimeNisaUsed[i]! += toNisa;
+            }
+            if (recordPivot) {
+              rebalanceInfoRecorded = {
+                direction: "defense-to-risk",
+                sellAmount: sell,
+                taxAmount: tax,
+                proceeds,
+                nisaUsed: toNisa,
+              };
+            }
+          }
+        }
+
+        if (recordPivot) {
+          pushPivotRow(keysForMask(pivotMask), {
+            year,
+            month: m + 1,
+            prevNisa,
+            prevTaxable,
+            prevDefense,
+            nisaTotal: nisaPaths[i]!,
+            taxableRiskTotal: taxablePaths[i]!,
+            defenseTotal:
+              useDefense && defensePaths !== null ? defensePaths[i]! : 0,
+            monthlyWithdrawal: monthlyWithdrawalRecorded,
+            monthlyPension: pensionRecorded,
+            monthlyOtherIncome: otherIncomeRecorded,
+            monthlyGainRisk: gainRisk,
+            monthlyGainDefense: gainDefense,
+            rebalanceInfo: rebalanceInfoRecorded,
+            nisaTransferInfo: null,
+          });
         }
       }
 
@@ -544,9 +625,13 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     }
 
     if (useDefense && defensePaths !== null) {
-      for (let i = 0; i < N; i++) totalPaths[i] = riskPaths[i]! + defensePaths[i]!;
+      for (let i = 0; i < N; i++) {
+        totalPaths[i] = nisaPaths[i]! + taxablePaths[i]! + defensePaths[i]!;
+      }
     } else {
-      totalPaths.set(riskPaths);
+      for (let i = 0; i < N; i++) {
+        totalPaths[i] = nisaPaths[i]! + taxablePaths[i]!;
+      }
     }
     let depleted = 0;
     for (let i = 0; i < N; i++) {
@@ -569,14 +654,14 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   }
 
   const totalContributed =
-    initialAmount + monthlyContribution * 12 * Math.min(contributionYears, totalYears);
+    initialTotal + monthlyContribution * 12 * Math.min(contributionYears, totalYears);
   let failureCount = 0;
   const finalTotals = pivotIndices === null ? new Float64Array(N) : null;
   for (let i = 0; i < N; i++) {
     const finalTotal =
       useDefense && defensePaths !== null
-        ? riskPaths[i]! + defensePaths[i]!
-        : riskPaths[i]!;
+        ? nisaPaths[i]! + taxablePaths[i]! + defensePaths[i]!
+        : nisaPaths[i]! + taxablePaths[i]!;
     if (finalTotals !== null) finalTotals[i] = finalTotal;
     if (finalTotal + cumulativeWithdrawals[i]! < totalContributed) failureCount++;
   }
