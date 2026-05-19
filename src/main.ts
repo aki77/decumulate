@@ -706,8 +706,14 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
     const yearlyGain = rows.reduce((s, r) => s + r.monthlyGain, 0);
     const yearlyRate = rows.reduce((acc, r) => acc * (1 + r.monthlyRate), 1) - 1;
     const yearBand = classifyRateBand(yearlyRate, true);
+    const firstRow = rows[0]!;
+    const baseStr =
+      firstRow.baseWithdrawal > 0
+        ? `<span class="year-summary">基準月額 ${formatMan(firstRow.baseWithdrawal)}</span> `
+        : "";
     parts.push(
       `<details class="monthly-year"><summary>${yearLabel} ` +
+        baseStr +
         `<span class="year-summary">年合計運用損益 ${formatMonthlyGain(yearlyGain)}</span> ` +
         `<span class="year-summary year-rate" data-rate-band="${yearBand}">年率 ${formatRate(yearlyRate)}</span>` +
         `</summary>`,

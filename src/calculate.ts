@@ -111,6 +111,7 @@ export interface MonthlyProjection {
   idecoTotal: number;
   total: number;
   monthlyWithdrawal: number;
+  baseWithdrawal: number;
   monthlyPension: number;
   monthlyOtherIncome: number;
   monthlyGainRisk: number;
@@ -238,6 +239,7 @@ export function rebalanceTriBuckets(
   taxRate: number,
   nisaRemainAnnual: number,
   nisaRemainLifetime: number,
+  idecoTotal: number = 0,
 ): RebalanceTriResult {
   const {
     nisaTotal,
@@ -247,14 +249,15 @@ export function rebalanceTriBuckets(
     defenseTotal,
     defensePrincipal,
   } = state;
-  const riskSide = nisaTotal + taxableRiskTotal;
-  const total = riskSide + defenseTotal;
+  const liquidRiskSide = nisaTotal + taxableRiskTotal;
+  const total = liquidRiskSide + defenseTotal + idecoTotal;
   if (total <= 0) return { state, info: null };
   const delta = defenseRatio * total - defenseTotal;
   if (delta === 0) return { state, info: null };
 
   if (delta > 0) {
-    const sellRequested = Math.min(delta, riskSide);
+    // iDeCo は直接売却不可なので売却対象は NISA/特定のみ
+    const sellRequested = Math.min(delta, liquidRiskSide);
     const [sellFromTaxable, sellFromNisa] = splitRiskSide(
       sellRequested,
       taxableRiskTotal,
@@ -446,7 +449,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
   const idecoReceiveAge = computeIdecoReceiveAge(ideco.idecoReceiveStartAge, currentAge);
 
   // defenseRatio は初期総資産から導出（リバランスの目標値として使う）
-  const initialTotal = nisaTotal + taxableRiskTotal + defenseTotal;
+  const initialTotal = nisaTotal + taxableRiskTotal + defenseTotal + idecoState.total;
   const dr = initialTotal > 0 ? defenseTotal / initialTotal : 0;
 
   let lifetimeNisaUsed = Math.max(0, nisaInitialLifetimeUsed);
@@ -587,12 +590,13 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
       const currentTotal = nisaTotal + taxableRiskTotal + defenseTotal;
 
       let monthlyWithdrawal = 0;
+      let baseWithdrawal = 0;
       let monthPension = 0;
       let monthOtherIncome = 0;
 
       if (isWithdrawing && currentTotal > 0) {
-        let baseWithdrawal: number;
-        const riskSide = nisaTotal + taxableRiskTotal;
+        const riskSideForRate = nisaTotal + taxableRiskTotal + idecoState.total;
+        const liquidRiskSide = nisaTotal + taxableRiskTotal;
         if (withdrawalMode === "rate") {
           if (m === 0 && year === withdrawalStartYear + 1) {
             rateBasedMonthlyWithdrawal = (currentTotal * withdrawalRate) / 100 / 12;
@@ -602,7 +606,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else if (withdrawalMode === "rate-risk") {
           if (m === 0) {
-            rateBasedMonthlyWithdrawal = (riskSide * withdrawalRate) / 100 / 12;
+            rateBasedMonthlyWithdrawal = (riskSideForRate * withdrawalRate) / 100 / 12;
           }
           baseWithdrawal = rateBasedMonthlyWithdrawal;
         } else {
@@ -626,8 +630,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
         const [fromRiskSide, fromDefense] = defensePriorityOnDrawdown
-          ? splitRiskFirst(netWithdrawal, riskSide, defenseTotal)
-          : splitProportional(netWithdrawal, riskSide, defenseTotal);
+          ? splitRiskFirst(netWithdrawal, liquidRiskSide, defenseTotal)
+          : splitProportional(netWithdrawal, liquidRiskSide, defenseTotal);
         const [fromTaxableRisk, fromNisa] = splitRiskSide(
           fromRiskSide,
           taxableRiskTotal,
@@ -660,8 +664,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
 
       let rebalanceInfo: RebalanceInfo | null = null;
       if (dr > 0) {
-        const riskSide = nisaTotal + taxableRiskTotal;
-        if (needsRebalance(riskSide, defenseTotal, dr, rebalanceThresholdPoint)) {
+        const riskSideForRebalance = nisaTotal + taxableRiskTotal + idecoState.total;
+        if (needsRebalance(riskSideForRebalance, defenseTotal, dr, rebalanceThresholdPoint)) {
           const annualRemain = Math.max(0, nisaAnnualLimit - yearlyNisaUsed);
           const lifetimeRemain = Math.max(0, nisaLifetimeLimit - lifetimeNisaUsed);
           const rb = rebalanceTriBuckets(
@@ -677,6 +681,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
             taxRate,
             annualRemain,
             lifetimeRemain,
+            idecoState.total,
           );
           nisaTotal = rb.state.nisaTotal;
           nisaPrincipal = rb.state.nisaPrincipal;
@@ -706,6 +711,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         idecoTotal: Math.round(idecoState.total),
         total: Math.round(nisaTotal + taxableRiskTotal + defenseTotal + idecoState.total),
         monthlyWithdrawal: Math.round(monthlyWithdrawal),
+        baseWithdrawal: Math.round(baseWithdrawal),
         monthlyPension: Math.round(monthPension),
         monthlyOtherIncome: Math.round(monthOtherIncome),
         monthlyGainRisk: Math.round(gainRisk),

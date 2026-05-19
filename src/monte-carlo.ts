@@ -178,10 +178,10 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const initialNisaPrincipalValue = Math.max(0, initialNisa - initialNisaGain);
   const initialTaxableRiskPrincipalValue = Math.max(0, initialTaxableRisk - initialTaxableRiskGain);
   const initialDefensePrincipalValue = Math.max(0, initialDefense - initialDefenseGain);
-  const initialRiskSide = initialNisa + initialTaxableRisk;
 
   // iDeCo の事前計算（MC は簡易税率を一括適用）。
   const initialIdecoValue = idecoEnabled ? Math.max(0, ideco.initialIdeco) : 0;
+  const initialRiskSide = initialNisa + initialTaxableRisk + initialIdecoValue;
   const initialIdecoPrincipalValue = idecoEnabled
     ? Math.max(0, initialIdecoValue - Math.max(0, ideco.initialIdecoGain))
     : 0;
@@ -298,6 +298,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
         raw.nisaTotal + raw.taxableRiskTotal + raw.defenseTotal + raw.idecoTotal,
       ),
       monthlyWithdrawal: Math.round(raw.monthlyWithdrawal),
+      baseWithdrawal: Math.round(raw.monthlyWithdrawal),
       monthlyPension: Math.round(raw.monthlyPension),
       monthlyOtherIncome: Math.round(raw.monthlyOtherIncome),
       monthlyGainRisk: Math.round(raw.monthlyGainRisk),
@@ -482,7 +483,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
           lifetimeNisaUsed[i]! += toNisa;
         }
 
-        const riskSide = nisaPaths[i]! + taxablePaths[i]!;
+        const idecoValue = useIdeco ? idecoPaths![i]! : 0;
+        const liquidRiskSide = nisaPaths[i]! + taxablePaths[i]!;
+        const riskSide = liquidRiskSide + idecoValue;
         const defenseValue = useDefense && defensePaths !== null ? defensePaths[i]! : 0;
 
         // 積立期のピーク値を引きずらないよう、取り崩し開始月に高値基準（HWM）を再初期化する
@@ -538,25 +541,25 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               if (inDrawdown && defenseValue > 0) {
                 fromDefense = Math.min(netWithdrawal, defenseValue);
                 fromRiskSide = netWithdrawal - fromDefense;
-              } else if (priorityOnDrawdown && riskSide > 0) {
-                fromRiskSide = Math.min(netWithdrawal, riskSide);
+              } else if (priorityOnDrawdown && liquidRiskSide > 0) {
+                fromRiskSide = Math.min(netWithdrawal, liquidRiskSide);
                 fromDefense = netWithdrawal - fromRiskSide;
               } else {
-                fromRiskSide = netWithdrawal * (riskSide / total);
+                fromRiskSide = netWithdrawal * (liquidRiskSide / total);
                 fromDefense = netWithdrawal * (defenseValue / total);
               }
-              if (fromRiskSide > riskSide) {
-                fromDefense += fromRiskSide - riskSide;
-                fromRiskSide = riskSide;
+              if (fromRiskSide > liquidRiskSide) {
+                fromDefense += fromRiskSide - liquidRiskSide;
+                fromRiskSide = liquidRiskSide;
               }
               if (fromDefense > defenseValue) {
                 fromRiskSide += fromDefense - defenseValue;
                 fromDefense = defenseValue;
               }
-              if (fromRiskSide > riskSide) fromRiskSide = riskSide;
+              if (fromRiskSide > liquidRiskSide) fromRiskSide = liquidRiskSide;
               if (fromDefense > defenseValue) fromDefense = defenseValue;
             } else {
-              fromRiskSide = Math.min(netWithdrawal, riskSide);
+              fromRiskSide = Math.min(netWithdrawal, liquidRiskSide);
               fromDefense = 0;
             }
 
@@ -609,7 +612,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
           defenseCostBasis !== null &&
           !shouldSkipRebalance &&
           needsRebalance(
-            nisaPaths[i]! + taxablePaths[i]!,
+            liquidRiskSide + idecoValue,
             defensePaths[i]!,
             dr,
             rebalanceThresholdPoint,
@@ -620,13 +623,15 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
           const taxablePrincipalLocal = taxableCostBasis[i]!;
           const defenseTotalLocal = defensePaths[i]!;
           const defensePrincipalLocal = defenseCostBasis[i]!;
-          const riskSideLocal = nisaTotalLocal + taxableTotalLocal;
+          const liquidRiskSideLocal = nisaTotalLocal + taxableTotalLocal;
+          const riskSideLocal = liquidRiskSideLocal + idecoValue;
           const totalLocal = riskSideLocal + defenseTotalLocal;
           const targetDefense = dr * totalLocal;
           const delta = targetDefense - defenseTotalLocal;
 
           if (delta > 0) {
-            const sellRequested = Math.min(delta, riskSideLocal);
+            // iDeCo は売却不可なので売却対象は NISA/特定のみ
+            const sellRequested = Math.min(delta, liquidRiskSideLocal);
             const sellFromTaxable = Math.min(sellRequested, taxableTotalLocal);
             const sellFromNisa = sellRequested - sellFromTaxable;
             const gainRatioTaxable =
