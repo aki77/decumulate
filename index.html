@@ -203,6 +203,20 @@
             </label>
             <input id="withdrawalRate" type="number" min="0" max="20" step="0.1" value="4" />
           </div>
+          <div class="field hidden" id="monthlyWithdrawalFloorWrap">
+            <label for="monthlyWithdrawalFloor">
+              月額下限（万円, 任意）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">年率モードで計算した月額がこの値を下回ったら、この値まで引き上げます。空欄なら無制限。値は「現在の購買力」基準で、シミュレーション内では毎年インフレ率分だけ自動で増えるため実質価値が保たれます。資産がほぼ枯渇したときは下限を維持できず資産残全額を引き出します。</span></span>
+            </label>
+            <input id="monthlyWithdrawalFloor" type="number" min="0" step="1" placeholder="例: 20" />
+          </div>
+          <div class="field hidden" id="monthlyWithdrawalCeilingWrap">
+            <label for="monthlyWithdrawalCeiling">
+              月額上限（万円, 任意）
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">年率モードで計算した月額がこの値を上回ったら、この値で抑えます。空欄なら無制限。値は「現在の購買力」基準で、毎年インフレ率分だけ自動で増えます。下限と上限を両方指定して下限 > 上限になった場合は上限が優先されます。</span></span>
+            </label>
+            <input id="monthlyWithdrawalCeiling" type="number" min="0" step="1" placeholder="例: 40" />
+          </div>
           <div class="field checkbox-field" id="inflationAdjustedWithdrawalWrap">
             <input id="inflationAdjustedWithdrawal" type="checkbox" />
             <label for="inflationAdjustedWithdrawal">月額をインフレに連動させる</label>

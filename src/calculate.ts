@@ -16,6 +16,8 @@ export interface CalculateParams {
   withdrawalMode: "amount" | "rate" | "rate-risk";
   fixedMonthlyWithdrawal: number;
   withdrawalRate: number;
+  monthlyWithdrawalFloor: number | null;
+  monthlyWithdrawalCeiling: number | null;
   inflationAdjustedWithdrawal: boolean;
   taxFree: boolean;
   basePension: number;
@@ -75,6 +77,18 @@ export interface MonthlyProjection {
 export interface CompoundResult {
   yearly: YearlyProjection[];
   monthly: MonthlyProjection[];
+}
+
+// 年率モード時の月額下限/上限クランプ。null は無効を意味する。
+export function clampToBounds(
+  value: number,
+  floor: number | null,
+  ceiling: number | null,
+): number {
+  let v = value;
+  if (floor !== null && v < floor) v = floor;
+  if (ceiling !== null && v > ceiling) v = ceiling;
+  return v;
 }
 
 // 1バケットから amount を取り崩し、含み益按分課税分も合わせて控除する。
@@ -200,6 +214,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     withdrawalMode,
     fixedMonthlyWithdrawal,
     withdrawalRate,
+    monthlyWithdrawalFloor,
+    monthlyWithdrawalCeiling,
     inflationAdjustedWithdrawal,
     taxFree,
     basePension,
@@ -236,6 +252,10 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
   let defensePrincipal = defenseTotal;
   let currentMonthlyWithdrawal = fixedMonthlyWithdrawal;
   let rateBasedMonthlyWithdrawal = 0;
+  const isAnyRateMode = withdrawalMode === "rate" || withdrawalMode === "rate-risk";
+  // 決定論版は名目値計算のため、年率モードの下限/上限を毎年初に *=(1+ri) して実質購買力を一定に保つ。
+  let currentMonthlyFloor: number | null = monthlyWithdrawalFloor;
+  let currentMonthlyCeiling: number | null = monthlyWithdrawalCeiling;
 
   const projections: YearlyProjection[] = [
     {
@@ -259,6 +279,11 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     let yearlyWithdrawal = 0;
     let yearlyPension = 0;
     let yearlyOtherIncome = 0;
+
+    if (ri > 0) {
+      if (currentMonthlyFloor !== null) currentMonthlyFloor *= 1 + ri;
+      if (currentMonthlyCeiling !== null) currentMonthlyCeiling *= 1 + ri;
+    }
 
     for (let m = 0; m < 12; m++) {
       const prevRisk = riskTotal;
@@ -300,6 +325,10 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
           if (inflationAdjustedWithdrawal) {
             currentMonthlyWithdrawal *= monthlyInflationFactor;
           }
+        }
+
+        if (isAnyRateMode) {
+          baseWithdrawal = clampToBounds(baseWithdrawal, currentMonthlyFloor, currentMonthlyCeiling);
         }
 
         const pensionActive =

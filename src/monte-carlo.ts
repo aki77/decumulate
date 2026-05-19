@@ -3,6 +3,7 @@
 import { adjustedMonthlyPension } from "./pension.ts";
 import {
   TAX_RATE,
+  clampToBounds,
   needsRebalance,
   rebalanceBuckets,
   type CalculateParams,
@@ -90,6 +91,8 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     withdrawalMode,
     fixedMonthlyWithdrawal,
     withdrawalRate,
+    monthlyWithdrawalFloor,
+    monthlyWithdrawalCeiling,
     inflationAdjustedWithdrawal,
     taxFree,
     basePension,
@@ -135,6 +138,10 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const isRateMode = withdrawalMode === "rate";
   const isRateRiskMode = withdrawalMode === "rate-risk";
   const isAnyRateMode = isRateMode || isRateRiskMode;
+
+  // MC は内部が実質値計算。入力値（今日の購買力）をそのまま全期間の実質閾値に使う（決定論版とは違いインフレ進行させない）。
+  const floorReal: number | null = monthlyWithdrawalFloor;
+  const ceilingReal: number | null = monthlyWithdrawalCeiling;
 
   // 名目固定の引出額は実質値で目減りするのでデフレ調整
   const preWithdrawalDeflation =
@@ -333,6 +340,10 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               baseWithdrawal = currentMonthlyWithdrawal[i]!;
             }
 
+            if (isAnyRateMode) {
+              baseWithdrawal = clampToBounds(baseWithdrawal, floorReal, ceilingReal);
+            }
+
             const income = monthPension + monthlyOtherIncome;
             const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
@@ -467,6 +478,10 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
             } else {
               baseWithdrawal = currentMonthlyWithdrawal[i]!;
+            }
+
+            if (isAnyRateMode) {
+              baseWithdrawal = clampToBounds(baseWithdrawal, floorReal, ceilingReal);
             }
 
             const income = monthPension + monthlyOtherIncome;

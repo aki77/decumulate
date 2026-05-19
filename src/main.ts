@@ -57,6 +57,8 @@ const PERSIST_IDS = [
   "withdrawalMode",
   "fixedMonthlyWithdrawal",
   "withdrawalRate",
+  "monthlyWithdrawalFloor",
+  "monthlyWithdrawalCeiling",
   "inflationAdjustedWithdrawal",
   "taxFree",
   "basePension",
@@ -103,6 +105,15 @@ function readMan(id: string, fallbackMan = 0): number {
   return readNumber(id, fallbackMan) * MAN;
 }
 
+function readManOrNull(id: string): number | null {
+  const el = document.getElementById(id) as HTMLInputElement | null;
+  if (!el) return null;
+  const raw = el.value;
+  if (raw === "" || raw === null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n * MAN : null;
+}
+
 function readChecked(id: string): boolean {
   const el = document.getElementById(id) as HTMLInputElement | null;
   return el ? el.checked : false;
@@ -133,6 +144,8 @@ function readParams(): MonteCarloParams {
       | "rate-risk",
     fixedMonthlyWithdrawal: readMan("fixedMonthlyWithdrawal", 25),
     withdrawalRate: readNumber("withdrawalRate", 4),
+    monthlyWithdrawalFloor: readManOrNull("monthlyWithdrawalFloor"),
+    monthlyWithdrawalCeiling: readManOrNull("monthlyWithdrawalCeiling"),
     inflationAdjustedWithdrawal: readChecked("inflationAdjustedWithdrawal"),
     taxFree: readChecked("taxFree"),
     basePension: readMan("basePension", 0),
@@ -635,16 +648,22 @@ function syncWithdrawalModeUI(): void {
   const amountWrap = document.getElementById("withdrawalAmountWrap")!;
   const rateWrap = document.getElementById("withdrawalRateWrap")!;
   const inflationToggleWrap = document.getElementById("inflationAdjustedWithdrawalWrap")!;
+  const floorWrap = document.getElementById("monthlyWithdrawalFloorWrap")!;
+  const ceilingWrap = document.getElementById("monthlyWithdrawalCeilingWrap")!;
   const mode = select.value;
   if (mode === "rate" || mode === "rate-risk") {
     amountWrap.classList.add("hidden");
     rateWrap.classList.remove("hidden");
     // 率モードはインフレ調整トグル不要
     inflationToggleWrap.classList.add("hidden");
+    floorWrap.classList.remove("hidden");
+    ceilingWrap.classList.remove("hidden");
   } else {
     amountWrap.classList.remove("hidden");
     rateWrap.classList.add("hidden");
     inflationToggleWrap.classList.remove("hidden");
+    floorWrap.classList.add("hidden");
+    ceilingWrap.classList.add("hidden");
   }
 }
 
