@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); TRANSCRIPT=$(echo \"$INPUT\" | jq -r '.transcript_path // empty'); LINES=$(git diff HEAD --numstat 2>/dev/null | awk '{add+=$1; del+=$2} END {print add+del+0}'); if [ \"$LINES\" -ge 10 ] && [ -n \"$TRANSCRIPT\" ] && ! grep -q '/simplify' \"$TRANSCRIPT\" 2>/dev/null; then echo '{\"decision\":\"block\",\"reason\":\"/simplify を実行してからコードレビューを完了してください（10行以上の変更があります）\"}'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
