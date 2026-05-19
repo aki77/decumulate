@@ -551,3 +551,97 @@ body {
   visibility: visible;
   opacity: 1;
 }
+
+/* その他の月収（期間付き複数件） */
+.other-incomes-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.other-incomes-header label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.other-incomes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.other-incomes-list:empty {
+  display: none;
+}
+
+.other-income-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.other-income-row .oi-label {
+  grid-column: 1 / 2;
+}
+
+.other-income-row .oi-remove {
+  grid-column: -2 / -1;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.other-income-row .oi-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.other-income-row input[type="number"],
+.other-income-row input[type="text"],
+.other-income-row select {
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  min-width: 0;
+  width: 100%;
+}
+
+.other-income-row .oi-amount,
+.other-income-row .oi-start,
+.other-income-row .oi-end {
+  width: 6em;
+}
+
+.other-income-row .oi-period-sep {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .other-income-row {
+    grid-template-columns: 1fr auto;
+  }
+  .other-income-row .oi-label { grid-column: 1 / 2; }
+  .other-income-row .oi-remove { grid-column: 2 / 3; }
+  .other-income-row .oi-amount,
+  .other-income-row .oi-mode,
+  .other-income-row .oi-start,
+  .other-income-row .oi-period-sep,
+  .other-income-row .oi-end {
+    grid-column: span 2;
+  }
+}

@@ -1,6 +1,7 @@
 // 決定論的な複利 + 取り崩しシミュレーション
 // 月次ループで運用 -> 積立 -> 取り崩し -> 損益按分課税 の順に処理する
 import { adjustedMonthlyPension } from "./pension.ts";
+import { sumOtherIncomeAt, type OtherIncomeMonthly } from "./other-income.ts";
 
 export const TAX_RATE = 0.20315;
 
@@ -23,7 +24,7 @@ export interface CalculateParams {
   basePension: number;
   pensionStartAge: number;
   currentAge: number | null;
-  monthlyOtherIncome: number;
+  otherIncomes: OtherIncomeMonthly[];
   defenseRatio: number;
   defenseAnnualReturnRate: number;
   rebalanceThresholdPoint: number;
@@ -221,7 +222,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     basePension,
     pensionStartAge,
     currentAge,
-    monthlyOtherIncome,
+    otherIncomes,
     defenseRatio,
     defenseAnnualReturnRate,
     rebalanceThresholdPoint,
@@ -334,7 +335,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         const pensionActive =
           pensionStartYearOffset != null && year >= pensionStartYearOffset && monthlyPension > 0;
         monthPension = pensionActive ? monthlyPension : 0;
-        monthOtherIncome = monthlyOtherIncome;
+        // year は 1-based、normalizeOtherIncomes の startYearOffset は 0-based なので year - 1 で揃える。
+        monthOtherIncome = sumOtherIncomeAt(otherIncomes, year - 1);
         const income = monthPension + monthOtherIncome;
         const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 

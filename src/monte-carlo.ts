@@ -10,6 +10,7 @@ import {
   type MonthlyProjection,
   type RebalanceInfo,
 } from "./calculate.ts";
+import { sumOtherIncomeAt } from "./other-income.ts";
 
 const NUM_SIMULATIONS = 5000;
 const SEED = 42;
@@ -98,7 +99,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     basePension,
     pensionStartAge,
     currentAge,
-    monthlyOtherIncome,
+    otherIncomes,
     defenseRatio,
     defenseAnnualReturnRate,
     defenseVolatility,
@@ -258,6 +259,12 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     },
   ];
 
+  // RNG は触らない pure pre-compute なので phase1/phase2 のパス一致性に影響しない。
+  const otherIncomePerYear = new Float64Array(totalYears + 1);
+  for (let y = 1; y <= totalYears; y++) {
+    otherIncomePerYear[y] = sumOtherIncomeAt(otherIncomes, y - 1);
+  }
+
   for (let year = 1; year <= totalYears; year++) {
     const isContributing = year <= contributionYears;
     const isWithdrawing =
@@ -267,6 +274,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     const pensionActive =
       pensionStartYearOffset != null && year >= pensionStartYearOffset && monthlyPension > 0;
     const monthPension = pensionActive ? monthlyPension : 0;
+    const monthOtherIncomeForYear = otherIncomePerYear[year]!;
     const yearlyWithdrawals = new Float64Array(N);
 
     // rate モードでは年頭にインフレ調整。決定論と挙動を揃える。
@@ -344,12 +352,12 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               baseWithdrawal = clampToBounds(baseWithdrawal, floorReal, ceilingReal);
             }
 
-            const income = monthPension + monthlyOtherIncome;
+            const income = monthPension + monthOtherIncomeForYear;
             const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
             if (recordPivot) {
               pensionRecorded = monthPension;
-              otherIncomeRecorded = monthlyOtherIncome;
+              otherIncomeRecorded = monthOtherIncomeForYear;
             }
 
             if (netWithdrawal > 0) {
@@ -484,12 +492,12 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               baseWithdrawal = clampToBounds(baseWithdrawal, floorReal, ceilingReal);
             }
 
-            const income = monthPension + monthlyOtherIncome;
+            const income = monthPension + monthOtherIncomeForYear;
             const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
             if (recordPivot) {
               pensionRecorded = monthPension;
-              otherIncomeRecorded = monthlyOtherIncome;
+              otherIncomeRecorded = monthOtherIncomeForYear;
             }
 
             if (netWithdrawal > 0) {

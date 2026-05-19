@@ -29,7 +29,7 @@ const BASE_PARAMS: MonteCarloParams = {
   basePension: 0,
   pensionStartAge: 65,
   currentAge: null,
-  monthlyOtherIncome: 0,
+  otherIncomes: [],
   defenseRatio: 0,
   defenseAnnualReturnRate: 0,
   defenseVolatility: 0,

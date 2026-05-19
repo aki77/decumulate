@@ -245,9 +245,15 @@
             </label>
             <input id="pensionStartAge" type="number" min="60" max="75" step="1" value="65" />
           </div>
-          <div class="field">
-            <label for="monthlyOtherIncome">その他の月収（手取り, 万円）</label>
-            <input id="monthlyOtherIncome" type="number" min="0" step="1" value="0" />
+          <div class="field other-incomes-field">
+            <div class="other-incomes-header">
+              <label>その他の月収（手取り）</label>
+              <span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">副業・講演料・家賃収入など、年金以外の収入を期間付きで複数登録できます。例:「副業300万円/年を今後5年」。年齢未設定時は「経過年（0=現在）」として扱います。終了は exclusive（30〜35なら 30,31,32,33,34歳の5年間）。</span></span>
+            </div>
+            <div id="otherIncomesList" class="other-incomes-list"></div>
+            <div class="preset-buttons">
+              <button type="button" id="otherIncomeAdd">＋ 収入を追加</button>
+            </div>
           </div>
         </div>
 

@@ -30,7 +30,7 @@ const BASE_PARAMS: CalculateParams = {
   basePension: 0,
   pensionStartAge: 65,
   currentAge: null,
-  monthlyOtherIncome: 0,
+  otherIncomes: [],
   defenseRatio: 0,
   defenseAnnualReturnRate: 0,
   rebalanceThresholdPoint: 5,
@@ -798,4 +798,98 @@ test("calculateCompound (rate) - 下限が資産を超える場合は資産残�
   assert.ok(last.total === 0 || last.total < 100);
   // NaN/Infinity が出ない
   for (const y of result.yearly) assert.ok(Number.isFinite(y.total));
+});
+
+// --- otherIncomes (期間付き複数件) ---
+
+test("calculateCompound (otherIncomes) - 単一件・期間内で年合計に反映", () => {
+  // 月 10000 円を year=1..5 で加算
+  const result = calculateCompound({
+    ...BASE_PARAMS,
+    initialAmount: 10000000,
+    annualReturnRate: 0,
+    expenseRatio: 0,
+    inflationRate: 0,
+    contributionYears: 0,
+    withdrawalStartYear: 0,
+    withdrawalYears: 5,
+    fixedMonthlyWithdrawal: 50000,
+    taxFree: true,
+    otherIncomes: [{ monthlyAmount: 10000, startYearOffset: 0, endYearOffset: 5 }],
+  });
+  for (let y = 1; y <= 5; y++) {
+    assert.strictEqual(result.yearly[y]!.yearlyOtherIncome, 10000 * 12);
+  }
+});
+
+test("calculateCompound (otherIncomes) - 複数件の合算（重複期間は足し合わせ）", () => {
+  const result = calculateCompound({
+    ...BASE_PARAMS,
+    initialAmount: 10000000,
+    annualReturnRate: 0,
+    inflationRate: 0,
+    contributionYears: 0,
+    withdrawalStartYear: 0,
+    withdrawalYears: 5,
+    fixedMonthlyWithdrawal: 50000,
+    taxFree: true,
+    otherIncomes: [
+      { monthlyAmount: 10000, startYearOffset: 0, endYearOffset: 3 },
+      { monthlyAmount: 5000, startYearOffset: 1, endYearOffset: 4 },
+    ],
+  });
+  // year=1 (elapsed=0): 10000 のみ → 120000
+  assert.strictEqual(result.yearly[1]!.yearlyOtherIncome, 10000 * 12);
+  // year=2 (elapsed=1): 10000 + 5000 → 180000
+  assert.strictEqual(result.yearly[2]!.yearlyOtherIncome, 15000 * 12);
+  // year=3 (elapsed=2): 10000 + 5000 → 180000
+  assert.strictEqual(result.yearly[3]!.yearlyOtherIncome, 15000 * 12);
+  // year=4 (elapsed=3): 5000 のみ → 60000
+  assert.strictEqual(result.yearly[4]!.yearlyOtherIncome, 5000 * 12);
+  // year=5 (elapsed=4): 期間外 → 0
+  assert.strictEqual(result.yearly[5]!.yearlyOtherIncome, 0);
+});
+
+test("calculateCompound (otherIncomes) - 期間外は加算されない（取り崩し額には影響しない）", () => {
+  const params: CalculateParams = {
+    ...BASE_PARAMS,
+    initialAmount: 10000000,
+    annualReturnRate: 0,
+    inflationRate: 0,
+    contributionYears: 0,
+    withdrawalStartYear: 0,
+    withdrawalYears: 5,
+    fixedMonthlyWithdrawal: 100000,
+    taxFree: true,
+    otherIncomes: [{ monthlyAmount: 100000, startYearOffset: 10, endYearOffset: 20 }],
+  };
+  const result = calculateCompound(params);
+  for (let y = 1; y <= 5; y++) {
+    assert.strictEqual(result.yearly[y]!.yearlyOtherIncome, 0);
+  }
+});
+
+test("calculateCompound (otherIncomes) - 他収入で取り崩しが減額される", () => {
+  // 月 5 万取り崩し、月 3 万の他収入 → 純引出は月 2 万
+  const result = calculateCompound({
+    ...BASE_PARAMS,
+    initialAmount: 10000000,
+    annualReturnRate: 0,
+    inflationRate: 0,
+    contributionYears: 0,
+    withdrawalStartYear: 0,
+    withdrawalYears: 5,
+    fixedMonthlyWithdrawal: 50000,
+    taxFree: true,
+    otherIncomes: [{ monthlyAmount: 30000, startYearOffset: 0, endYearOffset: 5 }],
+  });
+  // 純引出は月 2 万 × 12 = 24 万
+  assert.strictEqual(result.yearly[1]!.yearlyWithdrawal, 20000 * 12);
+});
+
+test("calculateCompound (otherIncomes) - 空配列は従来挙動と同じ（yearlyOtherIncome=0）", () => {
+  const result = calculateCompound({ ...BASE_PARAMS, otherIncomes: [] });
+  for (const y of result.yearly) {
+    assert.strictEqual(y.yearlyOtherIncome, 0);
+  }
 });

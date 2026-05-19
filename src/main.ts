@@ -11,6 +11,11 @@ import {
   scoreLabel,
   type MonteCarloParams,
 } from "./monte-carlo.ts";
+import {
+  normalizeOtherIncomes,
+  type OtherIncomeAmountMode,
+  type OtherIncomeEntry,
+} from "./other-income.ts";
 
 interface Preset {
   annualReturnRate: number;
@@ -65,7 +70,6 @@ const PERSIST_IDS = [
   "taxFree",
   "basePension",
   "pensionStartAge",
-  "monthlyOtherIncome",
   "defenseRatio",
   "defenseProductPreset",
   "defenseAnnualReturnRate",
@@ -75,6 +79,24 @@ const PERSIST_IDS = [
   "rebalanceThresholdPoint",
   "skipRebalanceOnDrawdown",
 ];
+
+let otherIncomesState: OtherIncomeEntry[] = [];
+
+function newId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `oi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function makeDefaultEntry(): OtherIncomeEntry {
+  return {
+    id: newId(),
+    label: "",
+    amountMan: 0,
+    amountMode: "monthly",
+    startAge: null,
+    endAge: null,
+  };
+}
 
 const HELP: Record<string, string> = {
   score: "枯渇確率・元本割れ確率・中央値残高から算出した 0–100 の総合指標。高いほど安心。",
@@ -129,17 +151,22 @@ function readSelect(id: string): string | null {
 function readParams(): MonteCarloParams {
   const currentAgeEl = document.getElementById("currentAge") as HTMLInputElement;
   const currentAgeRaw = currentAgeEl.value;
+  const currentAge = currentAgeRaw === "" ? null : Number(currentAgeRaw);
+  const contributionYears = readNumber("contributionYears", 30);
+  const withdrawalStartYear = readNumber("withdrawalStartYear", 30);
+  const withdrawalYears = readNumber("withdrawalYears", 30);
+  const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
   return {
-    currentAge: currentAgeRaw === "" ? null : Number(currentAgeRaw),
+    currentAge,
     initialAmount: readMan("initialAmount", 0),
     monthlyContribution: readMan("monthlyContribution", 5),
     annualReturnRate: readNumber("annualReturnRate", 5),
     expenseRatio: readNumber("expenseRatio", 0.1),
     inflationRate: readNumber("inflationRate", 2),
     volatility: readNumber("volatility", 15),
-    contributionYears: readNumber("contributionYears", 30),
-    withdrawalStartYear: readNumber("withdrawalStartYear", 30),
-    withdrawalYears: readNumber("withdrawalYears", 30),
+    contributionYears,
+    withdrawalStartYear,
+    withdrawalYears,
     withdrawalMode: (readSelect("withdrawalMode") || "amount") as
       | "amount"
       | "rate"
@@ -152,7 +179,7 @@ function readParams(): MonteCarloParams {
     taxFree: readChecked("taxFree"),
     basePension: readMan("basePension", 0),
     pensionStartAge: readNumber("pensionStartAge", 65),
-    monthlyOtherIncome: readMan("monthlyOtherIncome", 0),
+    otherIncomes: normalizeOtherIncomes(otherIncomesState, currentAge, totalYears, MAN),
     defenseRatio: readNumber("defenseRatio", 0),
     defenseAnnualReturnRate: readNumber("defenseAnnualReturnRate", 0.5),
     defenseVolatility: readNumber("defenseVolatility", 0),
@@ -475,8 +502,22 @@ function saveInputs(): void {
       if (!el) continue;
       data[id] = getInputValue(el);
     }
+    data["otherIncomes"] = otherIncomesState;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {}
+}
+
+function isOtherIncomeEntry(v: unknown): v is OtherIncomeEntry {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o["id"] === "string" &&
+    typeof o["label"] === "string" &&
+    typeof o["amountMan"] === "number" &&
+    (o["amountMode"] === "monthly" || o["amountMode"] === "annual") &&
+    (o["startAge"] === null || typeof o["startAge"] === "number") &&
+    (o["endAge"] === null || typeof o["endAge"] === "number")
+  );
 }
 
 function loadInputs(): void {
@@ -495,6 +536,10 @@ function loadInputs(): void {
     if (!el) continue;
     setInputValue(el, data[id]);
   }
+  const raw = data["otherIncomes"];
+  if (Array.isArray(raw)) {
+    otherIncomesState = raw.filter(isOtherIncomeEntry);
+  }
 }
 
 function resetInputs(): void {
@@ -506,6 +551,8 @@ function resetInputs(): void {
     if (!el) continue;
     setInputValue(el as HTMLInputElement, getInputDefault(el));
   }
+  otherIncomesState = [];
+  renderOtherIncomes();
 }
 
 function formatMonthlyGain(yen: number): string {
@@ -779,6 +826,102 @@ function setupWheelGuard(): void {
   );
 }
 
+function periodUnitLabel(): string {
+  const el = document.getElementById("currentAge") as HTMLInputElement | null;
+  return el && el.value !== "" ? "歳" : "年目";
+}
+
+function parseNumberOrNull(raw: string): number | null {
+  if (raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function bindEntryInput<K extends keyof OtherIncomeEntry>(
+  el: HTMLInputElement | HTMLSelectElement,
+  ev: "input" | "change",
+  apply: (value: string) => OtherIncomeEntry[K],
+  entry: OtherIncomeEntry,
+  key: K,
+): void {
+  el.addEventListener(ev, () => {
+    entry[key] = apply(el.value);
+    scheduleUpdate();
+  });
+}
+
+function renderOtherIncomes(): void {
+  const host = document.getElementById("otherIncomesList");
+  if (!host) return;
+  host.innerHTML = "";
+  const unit = periodUnitLabel();
+  for (const entry of otherIncomesState) {
+    const row = document.createElement("div");
+    row.className = "other-income-row";
+    row.dataset["id"] = entry.id;
+    row.innerHTML =
+      `<input class="oi-label" type="text" placeholder="ラベル（任意, 例: 副業）" />` +
+      `<button type="button" class="oi-remove" aria-label="削除">×</button>` +
+      `<input class="oi-amount" type="number" min="0" step="1" placeholder="金額(万円)" />` +
+      `<select class="oi-mode">` +
+      `<option value="monthly">月額</option>` +
+      `<option value="annual">年額</option>` +
+      `</select>` +
+      `<input class="oi-start" type="number" min="0" step="1" placeholder="開始(${unit})" />` +
+      `<span class="oi-period-sep">〜</span>` +
+      `<input class="oi-end" type="number" min="0" step="1" placeholder="終了(${unit})" />`;
+
+    const labelEl = row.querySelector(".oi-label") as HTMLInputElement;
+    const amountEl = row.querySelector(".oi-amount") as HTMLInputElement;
+    const modeEl = row.querySelector(".oi-mode") as HTMLSelectElement;
+    const startEl = row.querySelector(".oi-start") as HTMLInputElement;
+    const endEl = row.querySelector(".oi-end") as HTMLInputElement;
+    const removeBtn = row.querySelector(".oi-remove") as HTMLButtonElement;
+
+    labelEl.value = entry.label;
+    amountEl.value = entry.amountMan === 0 ? "" : String(entry.amountMan);
+    modeEl.value = entry.amountMode;
+    startEl.value = entry.startAge == null ? "" : String(entry.startAge);
+    endEl.value = entry.endAge == null ? "" : String(entry.endAge);
+
+    bindEntryInput(labelEl, "input", (v) => v, entry, "label");
+    bindEntryInput(
+      amountEl,
+      "input",
+      (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+      },
+      entry,
+      "amountMan",
+    );
+    bindEntryInput(modeEl, "change", (v) => v as OtherIncomeAmountMode, entry, "amountMode");
+    bindEntryInput(startEl, "input", parseNumberOrNull, entry, "startAge");
+    bindEntryInput(endEl, "input", parseNumberOrNull, entry, "endAge");
+    removeBtn.addEventListener("click", () => {
+      otherIncomesState = otherIncomesState.filter((e) => e.id !== entry.id);
+      renderOtherIncomes();
+      scheduleUpdate();
+    });
+
+    host.appendChild(row);
+  }
+}
+
+function setupOtherIncomes(): void {
+  const addBtn = document.getElementById("otherIncomeAdd");
+  if (addBtn) {
+    addBtn.addEventListener("click", () => {
+      otherIncomesState = [...otherIncomesState, makeDefaultEntry()];
+      renderOtherIncomes();
+      scheduleUpdate();
+    });
+  }
+  // currentAge 切替で placeholder の単位（歳/年目）が変わるため再描画。
+  // input を listen すると毎打鍵で全 DOM 再生成 → フォーカスロスを起こすので change のみ。
+  document.getElementById("currentAge")?.addEventListener("change", renderOtherIncomes);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   setupPensionPreset();
   setupProductPreset();
@@ -787,6 +930,8 @@ document.addEventListener("DOMContentLoaded", () => {
   setupWheelGuard();
   loadInputs();
   setupResetButton();
+  setupOtherIncomes();
+  renderOtherIncomes();
   setupWithdrawalModeToggle();
   setupDefenseToggle();
   update();
