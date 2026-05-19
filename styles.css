@@ -598,7 +598,7 @@ body {
 
 .other-income-row {
   display: grid;
-  grid-template-columns: 1fr auto auto auto auto auto;
+  grid-template-columns: 1fr 6em auto 6em auto 6em auto;
   align-items: center;
   gap: 6px;
   padding: 8px;
@@ -607,12 +607,15 @@ body {
   background: var(--bg);
 }
 
-.other-income-row .oi-label {
-  grid-column: 1 / 2;
-}
+.other-income-row .oi-label { grid-column: 1; }
+.other-income-row .oi-amount { grid-column: 2; }
+.other-income-row .oi-mode { grid-column: 3; }
+.other-income-row .oi-start { grid-column: 4; }
+.other-income-row .oi-period-sep { grid-column: 5; }
+.other-income-row .oi-end { grid-column: 6; }
+.other-income-row .oi-remove { grid-column: 7; }
 
 .other-income-row .oi-remove {
-  grid-column: -2 / -1;
   width: 28px;
   height: 28px;
   background: transparent;
@@ -641,12 +644,6 @@ body {
   width: 100%;
 }
 
-.other-income-row .oi-amount,
-.other-income-row .oi-start,
-.other-income-row .oi-end {
-  width: 6em;
-}
-
 .other-income-row .oi-period-sep {
   color: var(--muted);
   font-size: 12px;
@@ -656,13 +653,13 @@ body {
   .other-income-row {
     grid-template-columns: 1fr auto;
   }
-  .other-income-row .oi-label { grid-column: 1 / 2; }
-  .other-income-row .oi-remove { grid-column: 2 / 3; }
+  .other-income-row .oi-label { grid-column: 1; }
+  .other-income-row .oi-remove { grid-column: 2; }
   .other-income-row .oi-amount,
   .other-income-row .oi-mode,
   .other-income-row .oi-start,
   .other-income-row .oi-period-sep,
   .other-income-row .oi-end {
-    grid-column: span 2;
+    grid-column: 1 / -1;
   }
 }
