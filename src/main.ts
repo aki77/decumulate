@@ -134,8 +134,14 @@ const HELP: Record<string, string> = {
   idecoPension: "iDeCo年金受取の累計（税引後）。月次取り崩しの支出に充当される。",
 };
 
-function helpIcon(text: string): string {
-  return `<span class="help-icon" tabindex="0" aria-label="ヘルプ">?<span class="help-tip">${text}</span></span>`;
+function helpIcon(
+  text: string,
+  opts: { outerClass?: string; tipClass?: string; ariaLabel?: string } = {},
+): string {
+  const outerClass = opts.outerClass ?? "help-icon";
+  const tipClass = opts.tipClass ?? "help-tip";
+  const ariaLabel = opts.ariaLabel ?? "ヘルプ";
+  return `<span class="${outerClass}" tabindex="0" aria-label="${ariaLabel}">?<span class="${tipClass}">${text}</span></span>`;
 }
 
 function readNumber(id: string, fallback = 0): number {
@@ -707,10 +713,21 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
     const yearlyRate = rows.reduce((acc, r) => acc * (1 + r.monthlyRate), 1) - 1;
     const yearBand = classifyRateBand(yearlyRate, true);
     const firstRow = rows[0]!;
-    const baseStr =
-      firstRow.baseWithdrawal > 0
-        ? `<span class="year-summary">基準月額 ${formatMan(firstRow.baseWithdrawal)}</span> `
-        : "";
+    const baseStr = (() => {
+      if (firstRow.baseWithdrawal <= 0) return "";
+      const pension = firstRow.monthlyPension;
+      const other = firstRow.monthlyOtherIncome;
+      const total = firstRow.baseWithdrawal + pension + other;
+      const hasIncome = pension > 0 || other > 0;
+      const lines: string[] = [`資産取り崩し目標: ${formatMan(firstRow.baseWithdrawal)}`];
+      if (pension > 0) lines.push(`年金: ${formatMan(pension)}`);
+      if (other > 0) lines.push(`その他収入: ${formatMan(other)}`);
+      if (hasIncome) lines.push(`合計: ${formatMan(total)}`);
+      const tipHtml = lines.join("<br>");
+      const label = hasIncome ? "合計生活費" : "基準月額";
+      const icon = helpIcon(tipHtml, { outerClass: "year-summary-help", tipClass: "year-summary-tip", ariaLabel: "内訳" });
+      return `<span class="year-summary">${label} ${formatMan(total)}${icon}</span> `;
+    })();
     parts.push(
       `<details class="monthly-year"><summary>${yearLabel} ` +
         baseStr +
