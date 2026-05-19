@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); HOOK_ACTIVE=$(echo \"$INPUT\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('stop_hook_active','false'))\"); if [ \"$HOOK_ACTIVE\" = \"true\" ]; then exit 0; fi; TRANSCRIPT=$(echo \"$INPUT\" | jq -re '.transcript_path // empty' 2>/dev/null || echo \"$INPUT\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('transcript_path',''))\"); LINES=$(git diff HEAD --numstat 2>/dev/null | awk '{add+=$1; del+=$2} END {print add+del+0}'); if [ \"$LINES\" -ge 10 ] && [ -n \"$TRANSCRIPT\" ] && ! grep -q '/simplify' \"$TRANSCRIPT\" 2>/dev/null; then echo '{\"decision\":\"block\",\"reason\":\"/simplify を実行してからコードレビューを完了してください（10行以上の変更があります）\"}'; fi"
+            "command": "INPUT=$(cat); python3 -c \"\nimport sys, json, subprocess, os\nd = json.load(sys.stdin)\nif d.get('stop_hook_active') == True:\n    sys.exit(0)\ntranscript = d.get('transcript_path', '')\nresult = subprocess.run(['git', 'diff', 'HEAD', '--numstat'], capture_output=True, text=True, cwd=d.get('cwd', '.'))\nlines = sum(int(r.split()[0]) + int(r.split()[1]) for r in result.stdout.strip().splitlines() if r.split()) if result.stdout.strip() else 0\nif lines >= 10 and transcript and not any('/simplify' in line for line in open(transcript)):\n    print(json.dumps({'decision': 'block', 'reason': '/simplify を実行してからコードレビューを完了してください（10行以上の変更があります）'}))\n\" <<< \"$INPUT\""
           }
         ]
       }
