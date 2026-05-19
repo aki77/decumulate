@@ -1,6 +1,6 @@
 // モンテカルロ・シミュレーション（GBM、5000パス）
 // 実質値（インフレ控除後）で計算。再現性のため Mulberry32 + Box-Muller を使用。
-// 口座構造: NISA(非課税) / 特定リスク(課税) / 防衛(課税) の3バケット
+// 口座構造: NISA(非課税) / 特定リスク(課税) / 防衛(課税) の3バケット + iDeCo（独立）
 import { adjustedMonthlyPension } from "./pension.ts";
 import {
   TAX_RATE,
@@ -15,6 +15,12 @@ import {
   type RebalanceInfo,
 } from "./calculate.ts";
 import { sumOtherIncomeAt } from "./other-income.ts";
+import {
+  idecoEffectiveTaxRateForMC,
+  idecoReceiveAge as computeIdecoReceiveAge,
+  idecoReceiveStartYearOffset,
+  type IdecoPayoutEvent,
+} from "./ideco.ts";
 
 const NUM_SIMULATIONS = 5000;
 const SEED = 42;
@@ -117,6 +123,8 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     isCoupled,
     nisaTransferEnabled,
     nisaInitialLifetimeUsed,
+    idecoEnabled,
+    ideco,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
@@ -172,6 +180,25 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const initialDefensePrincipalValue = Math.max(0, initialDefense - initialDefenseGain);
   const initialRiskSide = initialNisa + initialTaxableRisk;
 
+  // iDeCo の事前計算（MC は簡易税率を一括適用）。
+  const initialIdecoValue = idecoEnabled ? Math.max(0, ideco.initialIdeco) : 0;
+  const initialIdecoPrincipalValue = idecoEnabled
+    ? Math.max(0, initialIdecoValue - Math.max(0, ideco.initialIdecoGain))
+    : 0;
+  const idecoReceiveOffset = idecoEnabled
+    ? idecoReceiveStartYearOffset(ideco.idecoReceiveStartAge, currentAge)
+    : 0;
+  const idecoReceiveAge = idecoEnabled
+    ? computeIdecoReceiveAge(ideco.idecoReceiveStartAge, currentAge)
+    : 65;
+  const idecoEffective = idecoEnabled
+    ? idecoEffectiveTaxRateForMC(ideco, idecoReceiveAge)
+    : { lumpSumRate: 0, pensionAnnualGrossEstimate: 0, pensionRate: 0 };
+  const idecoPensionTotalMonths = idecoEnabled ? Math.max(0, ideco.idecoPensionYears) * 12 : 0;
+  const idecoLumpRatio = idecoEnabled
+    ? Math.max(0, Math.min(1, ideco.idecoLumpSumRatio))
+    : 0;
+
   // 本体ループを内部関数化している理由: pivotMask=null（フェーズ1）と pivotMask=非null（フェーズ2）の
   // 間で RNG 消費順序を完全に揃えることで、両フェーズが同じパスを生成し再現性を保つ。
   const runSimulation = (
@@ -206,6 +233,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const taxableCostBasis = new Float64Array(N).fill(initialTaxableRiskPrincipalValue);
   const defensePaths = useDefense ? new Float64Array(N).fill(initialDefense) : null;
   const defenseCostBasis = useDefense ? new Float64Array(N).fill(initialDefensePrincipalValue) : null;
+  // iDeCo: リスクと同じ zRisk で運用するため Float64Array 1本のみ。受取は税引後額を返す。
+  const idecoPaths = idecoEnabled ? new Float64Array(N).fill(initialIdecoValue) : null;
+  const useIdeco = idecoEnabled && idecoPaths !== null;
   // 下落判定は「リスクサイド合計」のHWMで判断する
   const riskSideHWM = priorityOnDrawdown ? new Float64Array(N).fill(initialRiskSide) : null;
   const cumulativeWithdrawals = new Float64Array(N);
@@ -233,21 +263,28 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       prevNisa: number;
       prevTaxable: number;
       prevDefense: number;
+      prevIdeco: number;
       nisaTotal: number;
       taxableRiskTotal: number;
       defenseTotal: number;
+      idecoTotal: number;
       monthlyWithdrawal: number;
       monthlyPension: number;
       monthlyOtherIncome: number;
       monthlyGainRisk: number;
       monthlyGainDefense: number;
+      monthlyGainIdeco: number;
       rebalanceInfo: RebalanceInfo | null;
       nisaTransferInfo: NisaTransferInfo | null;
+      idecoLumpSumInfo: IdecoPayoutEvent | null;
+      idecoPensionInfo: IdecoPayoutEvent | null;
     },
   ): void => {
-    const prevTotal = raw.prevNisa + raw.prevTaxable + raw.prevDefense;
+    const prevTotal = raw.prevNisa + raw.prevTaxable + raw.prevDefense + raw.prevIdeco;
     const monthlyRate =
-      prevTotal > 0 ? (raw.monthlyGainRisk + raw.monthlyGainDefense) / prevTotal : 0;
+      prevTotal > 0
+        ? (raw.monthlyGainRisk + raw.monthlyGainDefense + raw.monthlyGainIdeco) / prevTotal
+        : 0;
     const row: MonthlyProjection = {
       year: raw.year,
       month: raw.month,
@@ -256,16 +293,24 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       taxableRiskTotal: Math.round(raw.taxableRiskTotal),
       riskTotal: Math.round(raw.nisaTotal + raw.taxableRiskTotal),
       defenseTotal: Math.round(raw.defenseTotal),
-      total: Math.round(raw.nisaTotal + raw.taxableRiskTotal + raw.defenseTotal),
+      idecoTotal: Math.round(raw.idecoTotal),
+      total: Math.round(
+        raw.nisaTotal + raw.taxableRiskTotal + raw.defenseTotal + raw.idecoTotal,
+      ),
       monthlyWithdrawal: Math.round(raw.monthlyWithdrawal),
       monthlyPension: Math.round(raw.monthlyPension),
       monthlyOtherIncome: Math.round(raw.monthlyOtherIncome),
       monthlyGainRisk: Math.round(raw.monthlyGainRisk),
       monthlyGainDefense: Math.round(raw.monthlyGainDefense),
-      monthlyGain: Math.round(raw.monthlyGainRisk + raw.monthlyGainDefense),
+      monthlyGainIdeco: Math.round(raw.monthlyGainIdeco),
+      monthlyGain: Math.round(
+        raw.monthlyGainRisk + raw.monthlyGainDefense + raw.monthlyGainIdeco,
+      ),
       monthlyRate,
       rebalanceInfo: raw.rebalanceInfo,
       nisaTransferInfo: raw.nisaTransferInfo,
+      idecoLumpSumInfo: raw.idecoLumpSumInfo,
+      idecoPensionInfo: raw.idecoPensionInfo,
     };
     for (const k of keys) pivotMonthlies[k].push(row);
   };
@@ -343,12 +388,30 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     for (let m = 0; m < 12; m++) {
       const isWithdrawalStartMonth = isFirstWithdrawalYear && m === 0;
 
+      // i に依存しない iDeCo フェーズ判定を m ループ先頭で先計算する
+      const idecoContributing =
+        useIdeco &&
+        ideco.idecoMonthlyContribution > 0 &&
+        year <= ideco.idecoContributionYears &&
+        year <= idecoReceiveOffset;
+      const idecoIsLumpSumMonth =
+        useIdeco && year === idecoReceiveOffset + 1 && m === 0 && idecoLumpRatio > 0;
+      const idecoMonthIndex = (year - 1 - idecoReceiveOffset) * 12 + m;
+      const idecoIsPensionMonth =
+        useIdeco &&
+        idecoLumpRatio < 1 &&
+        idecoPensionTotalMonths > 0 &&
+        idecoMonthIndex >= 0 &&
+        idecoMonthIndex < idecoPensionTotalMonths;
+      const idecoPensionRemainMonths = idecoPensionTotalMonths - idecoMonthIndex;
+
       for (let i = 0; i < N; i++) {
         const pivotMask = pivotMaskByIndex !== null ? pivotMaskByIndex[i]! : 0;
         const recordPivot = pivotMask !== 0;
         const prevNisa = nisaPaths[i]!;
         const prevTaxable = taxablePaths[i]!;
         const prevDefense = useDefense && defensePaths !== null ? defensePaths[i]! : 0;
+        const prevIdeco = useIdeco ? idecoPaths![i]! : 0;
 
         const zRisk = normalRandom(rng);
         const riskGrow = Math.exp(monthlyDriftRisk + monthlySigmaRisk * zRisk);
@@ -360,6 +423,12 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
           defensePaths[i]! *= Math.exp(monthlyDriftDef + monthlySigmaDef * zDef);
           gainDefense = defensePaths[i]! - prevDefense;
         }
+        // iDeCo: リスクと同じ zRisk で運用（仕様: 同利回り）。RNG 消費は増えないので既存テスト維持。
+        let gainIdeco = 0;
+        if (useIdeco) {
+          idecoPaths![i]! *= riskGrow;
+          gainIdeco = idecoPaths![i]! - prevIdeco;
+        }
 
         const gainNisa = nisaPaths[i]! - prevNisa;
         const gainTaxable = taxablePaths[i]! - prevTaxable;
@@ -368,6 +437,37 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
         let pensionRecorded = 0;
         let otherIncomeRecorded = 0;
         let rebalanceInfoRecorded: RebalanceInfo | null = null;
+        let idecoLumpSumRecorded: IdecoPayoutEvent | null = null;
+        let idecoPensionRecorded: IdecoPayoutEvent | null = null;
+        let idecoPensionProceedsForMonth = 0;
+
+        if (idecoContributing) {
+          idecoPaths![i]! += ideco.idecoMonthlyContribution;
+        }
+
+        if (idecoIsLumpSumMonth && idecoPaths![i]! > 0) {
+          const gross = idecoPaths![i]! * idecoLumpRatio;
+          const tax = gross * idecoEffective.lumpSumRate;
+          const proceeds = Math.max(0, gross - tax);
+          idecoPaths![i]! = Math.max(0, idecoPaths![i]! - gross);
+          taxablePaths[i]! += proceeds;
+          taxableCostBasis[i]! += proceeds;
+          if (recordPivot) {
+            idecoLumpSumRecorded = { grossAmount: gross, taxAmount: tax, proceeds };
+          }
+        }
+
+        if (idecoIsPensionMonth && idecoPaths![i]! > 0) {
+          const gross =
+            idecoPensionRemainMonths > 0 ? idecoPaths![i]! / idecoPensionRemainMonths : idecoPaths![i]!;
+          const monthlyTax = gross * idecoEffective.pensionRate;
+          const proceeds = Math.max(0, gross - monthlyTax);
+          idecoPaths![i]! = Math.max(0, idecoPaths![i]! - gross);
+          idecoPensionProceedsForMonth = proceeds;
+          if (recordPivot) {
+            idecoPensionRecorded = { grossAmount: gross, taxAmount: monthlyTax, proceeds };
+          }
+        }
 
         if (isContributing && monthlyContribution > 0) {
           const annualRemain = Math.max(0, nisaAnnualLimit - yearlyNisaUsed[i]!);
@@ -422,12 +522,13 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
             baseWithdrawal = clampToBounds(baseWithdrawal, floorReal, ceilingReal);
           }
 
-          const income = monthPension + monthOtherIncomeForYear;
+          const monOtherIncomeWithIdeco = monthOtherIncomeForYear + idecoPensionProceedsForMonth;
+          const income = monthPension + monOtherIncomeWithIdeco;
           const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
           if (recordPivot) {
             pensionRecorded = monthPension;
-            otherIncomeRecorded = monthOtherIncomeForYear;
+            otherIncomeRecorded = monOtherIncomeWithIdeco;
           }
 
           if (netWithdrawal > 0) {
@@ -602,17 +703,22 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
             prevNisa,
             prevTaxable,
             prevDefense,
+            prevIdeco,
             nisaTotal: nisaPaths[i]!,
             taxableRiskTotal: taxablePaths[i]!,
             defenseTotal:
               useDefense && defensePaths !== null ? defensePaths[i]! : 0,
+            idecoTotal: useIdeco ? idecoPaths![i]! : 0,
             monthlyWithdrawal: monthlyWithdrawalRecorded,
             monthlyPension: pensionRecorded,
             monthlyOtherIncome: otherIncomeRecorded,
             monthlyGainRisk: gainRisk,
             monthlyGainDefense: gainDefense,
+            monthlyGainIdeco: gainIdeco,
             rebalanceInfo: rebalanceInfoRecorded,
             nisaTransferInfo: null,
+            idecoLumpSumInfo: idecoLumpSumRecorded,
+            idecoPensionInfo: idecoPensionRecorded,
           });
         }
       }
@@ -624,14 +730,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       }
     }
 
-    if (useDefense && defensePaths !== null) {
-      for (let i = 0; i < N; i++) {
-        totalPaths[i] = nisaPaths[i]! + taxablePaths[i]! + defensePaths[i]!;
-      }
-    } else {
-      for (let i = 0; i < N; i++) {
-        totalPaths[i] = nisaPaths[i]! + taxablePaths[i]!;
-      }
+    for (let i = 0; i < N; i++) {
+      let t = nisaPaths[i]! + taxablePaths[i]!;
+      if (useDefense && defensePaths !== null) t += defensePaths[i]!;
+      if (useIdeco) t += idecoPaths![i]!;
+      totalPaths[i] = t;
     }
     let depleted = 0;
     for (let i = 0; i < N; i++) {
@@ -658,10 +761,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   let failureCount = 0;
   const finalTotals = pivotIndices === null ? new Float64Array(N) : null;
   for (let i = 0; i < N; i++) {
-    const finalTotal =
-      useDefense && defensePaths !== null
-        ? nisaPaths[i]! + taxablePaths[i]! + defensePaths[i]!
-        : nisaPaths[i]! + taxablePaths[i]!;
+    let finalTotal = nisaPaths[i]! + taxablePaths[i]!;
+    if (useDefense && defensePaths !== null) finalTotal += defensePaths[i]!;
+    if (useIdeco) finalTotal += idecoPaths![i]!;
     if (finalTotals !== null) finalTotals[i] = finalTotal;
     if (finalTotal + cumulativeWithdrawals[i]! < totalContributed) failureCount++;
   }

@@ -1,8 +1,16 @@
 // 決定論的な複利 + 取り崩しシミュレーション
 // 月次ループで運用 -> 積立 -> 取り崩し -> 損益按分課税 の順に処理する
-// 口座構造: NISA(非課税) / 特定リスク(課税) / 防衛(課税) の3バケット
+// 口座構造: NISA(非課税) / 特定リスク(課税) / 防衛(課税) の3バケット + iDeCo（独立バケット）
 import { adjustedMonthlyPension } from "./pension.ts";
 import { sumOtherIncomeAt, type OtherIncomeMonthly } from "./other-income.ts";
+import {
+  initIdecoState,
+  stepIdeco,
+  idecoReceiveStartYearOffset,
+  idecoReceiveAge as computeIdecoReceiveAge,
+  type IdecoParams,
+  type IdecoPayoutEvent,
+} from "./ideco.ts";
 
 export const TAX_RATE = 0.20315;
 
@@ -53,6 +61,10 @@ export interface CalculateParams {
   isCoupled: boolean;
   nisaTransferEnabled: boolean;
   nisaInitialLifetimeUsed: number;
+
+  // iDeCo（個人型確定拠出年金）。idecoEnabled=false の場合は無視。
+  idecoEnabled: boolean;
+  ideco: IdecoParams;
 }
 
 export interface YearlyProjection {
@@ -68,7 +80,10 @@ export interface YearlyProjection {
   nisaTotal: number;
   taxableRiskTotal: number;
   defenseTotal: number;
+  idecoTotal: number;
   nisaLifetimeUsed: number;
+  yearlyIdecoLumpSum: number;
+  yearlyIdecoPension: number;
 }
 
 export interface RebalanceInfo {
@@ -93,16 +108,20 @@ export interface MonthlyProjection {
   taxableRiskTotal: number;
   riskTotal: number;
   defenseTotal: number;
+  idecoTotal: number;
   total: number;
   monthlyWithdrawal: number;
   monthlyPension: number;
   monthlyOtherIncome: number;
   monthlyGainRisk: number;
   monthlyGainDefense: number;
+  monthlyGainIdeco: number;
   monthlyGain: number;
   monthlyRate: number;
   rebalanceInfo: RebalanceInfo | null;
   nisaTransferInfo: NisaTransferInfo | null;
+  idecoLumpSumInfo: IdecoPayoutEvent | null;
+  idecoPensionInfo: IdecoPayoutEvent | null;
 }
 
 export interface CompoundResult {
@@ -390,6 +409,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     isCoupled,
     nisaTransferEnabled,
     nisaInitialLifetimeUsed,
+    idecoEnabled,
+    ideco,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
@@ -416,6 +437,14 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
   let defenseTotal = initialDefense;
   let defensePrincipal = Math.max(0, initialDefense - initialDefenseGain);
 
+  // iDeCo は独立 state machine。defenseRatio や NISA枠の計算には含めない。
+  // idecoEnabled=false の場合は初期残高もゼロにして完全に無効化する。
+  let idecoState = idecoEnabled
+    ? initIdecoState(ideco)
+    : { total: 0, principal: 0 };
+  const idecoReceiveOffset = idecoReceiveStartYearOffset(ideco.idecoReceiveStartAge, currentAge);
+  const idecoReceiveAge = computeIdecoReceiveAge(ideco.idecoReceiveStartAge, currentAge);
+
   // defenseRatio は初期総資産から導出（リバランスの目標値として使う）
   const initialTotal = nisaTotal + taxableRiskTotal + defenseTotal;
   const dr = initialTotal > 0 ? defenseTotal / initialTotal : 0;
@@ -433,17 +462,24 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     {
       year: 0,
       age: currentAge != null ? currentAge : null,
-      principal: Math.round(nisaPrincipal + taxableRiskPrincipal + defensePrincipal),
+      principal: Math.round(
+        nisaPrincipal + taxableRiskPrincipal + defensePrincipal + idecoState.principal,
+      ),
       interest: 0,
       tax: 0,
-      total: Math.round(nisaTotal + taxableRiskTotal + defenseTotal),
+      total: Math.round(
+        nisaTotal + taxableRiskTotal + defenseTotal + idecoState.total,
+      ),
       yearlyWithdrawal: 0,
       yearlyPension: 0,
       yearlyOtherIncome: 0,
       nisaTotal: Math.round(nisaTotal),
       taxableRiskTotal: Math.round(taxableRiskTotal),
       defenseTotal: Math.round(defenseTotal),
+      idecoTotal: Math.round(idecoState.total),
       nisaLifetimeUsed: Math.round(lifetimeNisaUsed),
+      yearlyIdecoLumpSum: 0,
+      yearlyIdecoPension: 0,
     },
   ];
   const monthlyArr: MonthlyProjection[] = [];
@@ -456,6 +492,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     let yearlyPension = 0;
     let yearlyOtherIncome = 0;
     let yearlyNisaUsed = 0;
+    let yearlyIdecoLumpSum = 0;
+    let yearlyIdecoPension = 0;
 
     if (ri > 0) {
       if (currentMonthlyFloor !== null) currentMonthlyFloor *= 1 + ri;
@@ -501,6 +539,37 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
       const gainTaxableRisk = taxableRiskTotal - prevTaxableRisk;
       const gainRisk = gainNisa + gainTaxableRisk;
       const gainDefense = defenseTotal - prevDefense;
+
+      // iDeCo ステップ: 運用→拠出→受取（一時金/年金）
+      // 一時金は税引後を特定リスクに加算、年金は monOtherIncome に合流させて取り崩しで充当する。
+      let idecoLumpSumInfo: IdecoPayoutEvent | null = null;
+      let idecoPensionInfo: IdecoPayoutEvent | null = null;
+      let gainIdeco = 0;
+      let idecoPensionProceeds = 0;
+      if (idecoEnabled) {
+        const r = stepIdeco(
+          idecoState,
+          ideco,
+          year,
+          m,
+          idecoReceiveOffset,
+          idecoReceiveAge,
+          monthlyRateRisk,
+        );
+        idecoState = r.state;
+        gainIdeco = r.gain;
+        if (r.lumpSum) {
+          idecoLumpSumInfo = r.lumpSum;
+          taxableRiskTotal += r.lumpSum.proceeds;
+          taxableRiskPrincipal += r.lumpSum.proceeds;
+          yearlyIdecoLumpSum += r.lumpSum.proceeds;
+        }
+        if (r.pension) {
+          idecoPensionInfo = r.pension;
+          idecoPensionProceeds = r.pension.proceeds;
+          yearlyIdecoPension += r.pension.proceeds;
+        }
+      }
 
       if (isContributing && monthlyContribution > 0) {
         const annualRemain = Math.max(0, nisaAnnualLimit - yearlyNisaUsed);
@@ -551,7 +620,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
           pensionStartYearOffset != null && year >= pensionStartYearOffset && monthlyPension > 0;
         monthPension = pensionActive ? monthlyPension : 0;
         // year は 1-based、normalizeOtherIncomes の startYearOffset は 0-based なので year - 1 で揃える。
-        monthOtherIncome = sumOtherIncomeAt(otherIncomes, year - 1);
+        // iDeCo の年金受取分は otherIncome と同様に支出充当する。
+        monthOtherIncome = sumOtherIncomeAt(otherIncomes, year - 1) + idecoPensionProceeds;
         const income = monthPension + monthOtherIncome;
         const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
@@ -623,7 +693,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
       }
 
       const prevTotal = prevNisa + prevTaxableRisk + prevDefense;
-      const monthlyRate = prevTotal > 0 ? (gainRisk + gainDefense) / prevTotal : 0;
+      const monthlyRate =
+        prevTotal > 0 ? (gainRisk + gainDefense + gainIdeco) / prevTotal : 0;
       monthlyArr.push({
         year,
         month: m + 1,
@@ -632,31 +703,41 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         taxableRiskTotal: Math.round(taxableRiskTotal),
         riskTotal: Math.round(nisaTotal + taxableRiskTotal),
         defenseTotal: Math.round(defenseTotal),
-        total: Math.round(nisaTotal + taxableRiskTotal + defenseTotal),
+        idecoTotal: Math.round(idecoState.total),
+        total: Math.round(nisaTotal + taxableRiskTotal + defenseTotal + idecoState.total),
         monthlyWithdrawal: Math.round(monthlyWithdrawal),
         monthlyPension: Math.round(monthPension),
         monthlyOtherIncome: Math.round(monthOtherIncome),
         monthlyGainRisk: Math.round(gainRisk),
         monthlyGainDefense: Math.round(gainDefense),
-        monthlyGain: Math.round(gainRisk + gainDefense),
+        monthlyGainIdeco: Math.round(gainIdeco),
+        monthlyGain: Math.round(gainRisk + gainDefense + gainIdeco),
         monthlyRate,
         rebalanceInfo,
         nisaTransferInfo: m === 0 ? yearStartTransferInfo : null,
+        idecoLumpSumInfo,
+        idecoPensionInfo,
       });
     }
 
-    // tax: 年末時点でまだ売却していない含み益に対する「もし全部売却したら」の試算税。NISA分は除外。
+    // tax: 年末時点でまだ売却していない含み益に対する「もし全部売却したら」の試算税。NISA・iDeCo分は除外。
     // 月次ループ中に取り崩しと共に発生した課税分は currentTotal から既に控除済み。
     const endTaxable = taxableRiskTotal + defenseTotal;
     const endTaxablePrincipal = taxableRiskPrincipal + defensePrincipal;
     const endNisa = nisaTotal;
     const endNisaPrincipal = nisaPrincipal;
-    const endTotal = endTaxable + endNisa;
-    const endPrincipal = endTaxablePrincipal + endNisaPrincipal;
+    const endIdeco = idecoState.total;
+    const endIdecoPrincipal = idecoState.principal;
+    const endTotal = endTaxable + endNisa + endIdeco;
+    const endPrincipal = endTaxablePrincipal + endNisaPrincipal + endIdecoPrincipal;
     const taxableGain = endTaxable - endTaxablePrincipal;
     const nisaGain = endNisa - endNisaPrincipal;
+    const idecoGain = endIdeco - endIdecoPrincipal;
     const tax = taxableGain > 0 ? Math.round(taxableGain * taxRate) : 0;
-    const totalInterest = (taxableGain > 0 ? taxableGain : 0) + (nisaGain > 0 ? nisaGain : 0);
+    const totalInterest =
+      (taxableGain > 0 ? taxableGain : 0) +
+      (nisaGain > 0 ? nisaGain : 0) +
+      (idecoGain > 0 ? idecoGain : 0);
     const afterTaxTotal = Math.max(endTotal - tax, 0);
     projections.push({
       year,
@@ -671,7 +752,10 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
       nisaTotal: Math.round(nisaTotal),
       taxableRiskTotal: Math.round(taxableRiskTotal),
       defenseTotal: Math.round(defenseTotal),
+      idecoTotal: Math.round(idecoState.total),
       nisaLifetimeUsed: Math.round(lifetimeNisaUsed),
+      yearlyIdecoLumpSum: Math.round(yearlyIdecoLumpSum),
+      yearlyIdecoPension: Math.round(yearlyIdecoPension),
     });
   }
 

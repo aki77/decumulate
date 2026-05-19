@@ -49,6 +49,16 @@ const BASE_PARAMS: CalculateParams = {
   isCoupled: false,
   nisaTransferEnabled: false,
   nisaInitialLifetimeUsed: 0,
+  idecoEnabled: false,
+  ideco: {
+    initialIdeco: 0,
+    initialIdecoGain: 0,
+    idecoMonthlyContribution: 0,
+    idecoContributionYears: 0,
+    idecoReceiveStartAge: 65,
+    idecoLumpSumRatio: 1,
+    idecoPensionYears: 10,
+  },
 };
 
 // 非課税で計算したい場合は、特定リスクの代わりにNISA1本にする

@@ -504,7 +504,9 @@ body {
 }
 
 .monthly-details .monthly-table .rebalance-badge,
-.monthly-details .monthly-table .transfer-badge {
+.monthly-details .monthly-table .transfer-badge,
+.monthly-details .monthly-table .ideco-lump-badge,
+.monthly-details .monthly-table .ideco-pension-badge {
   position: relative;
   display: inline-block;
   cursor: help;
@@ -525,8 +527,18 @@ body {
   color: #16a34a;
 }
 
+.monthly-details .monthly-table .ideco-lump-badge {
+  color: #9333ea;
+}
+
+.monthly-details .monthly-table .ideco-pension-badge {
+  color: #db2777;
+}
+
 .monthly-details .monthly-table .rebalance-badge .rebalance-tip,
-.monthly-details .monthly-table .transfer-badge .rebalance-tip {
+.monthly-details .monthly-table .transfer-badge .rebalance-tip,
+.monthly-details .monthly-table .ideco-lump-badge .rebalance-tip,
+.monthly-details .monthly-table .ideco-pension-badge .rebalance-tip {
   visibility: hidden;
   opacity: 0;
   position: absolute;
@@ -552,7 +564,11 @@ body {
 .monthly-details .monthly-table .rebalance-badge:hover .rebalance-tip,
 .monthly-details .monthly-table .rebalance-badge:focus .rebalance-tip,
 .monthly-details .monthly-table .transfer-badge:hover .rebalance-tip,
-.monthly-details .monthly-table .transfer-badge:focus .rebalance-tip {
+.monthly-details .monthly-table .transfer-badge:focus .rebalance-tip,
+.monthly-details .monthly-table .ideco-lump-badge:hover .rebalance-tip,
+.monthly-details .monthly-table .ideco-lump-badge:focus .rebalance-tip,
+.monthly-details .monthly-table .ideco-pension-badge:hover .rebalance-tip,
+.monthly-details .monthly-table .ideco-pension-badge:focus .rebalance-tip {
   visibility: visible;
   opacity: 1;
 }

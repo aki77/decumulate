@@ -7,6 +7,7 @@ import {
   type RebalanceInfo,
   type YearlyProjection,
 } from "./calculate.ts";
+import type { IdecoPayoutEvent } from "./ideco.ts";
 import {
   simulateMonteCarlo,
   computeSecurityScore,
@@ -86,6 +87,14 @@ const PERSIST_IDS = [
   "drawdownThresholdPercent",
   "rebalanceThresholdPoint",
   "skipRebalanceOnDrawdown",
+  "idecoEnabled",
+  "initialIdeco",
+  "initialIdecoGain",
+  "idecoMonthlyContribution",
+  "idecoContributionYears",
+  "idecoReceiveStartAge",
+  "idecoLumpSumRatio",
+  "idecoPensionYears",
 ];
 
 let otherIncomesState: OtherIncomeEntry[] = [];
@@ -120,6 +129,9 @@ const HELP: Record<string, string> = {
   failure: "最終資産が積立元本合計を下回る試行の割合。",
   finalNisa: "シミュレーション最終年のNISA口座残高（時価, 名目値）。NISAは非課税のため、取り崩しを最後に回すと有利。",
   nisaUsage: "NISA生涯枠（1人1800万 / 夫婦3600万）のうち、買付額ベースで何%を使ったか。",
+  idecoTotal: "シミュレーション最終年のiDeCo残高（時価, 名目値）。受取開始後は減少していく。",
+  idecoLumpSum: "受取開始月に一時金として受け取った税引後合計（特定リスクに移管済み）。",
+  idecoPension: "iDeCo年金受取の累計（税引後）。月次取り崩しの支出に充当される。",
 };
 
 function helpIcon(text: string): string {
@@ -203,6 +215,16 @@ function readParams(): MonteCarloParams {
     drawdownThresholdPercent: readNumber("drawdownThresholdPercent", 10),
     rebalanceThresholdPoint: readNumber("rebalanceThresholdPoint", 5),
     skipRebalanceOnDrawdown: readChecked("skipRebalanceOnDrawdown"),
+    idecoEnabled: readChecked("idecoEnabled"),
+    ideco: {
+      initialIdeco: readMan("initialIdeco", 0),
+      initialIdecoGain: readMan("initialIdecoGain", 0),
+      idecoMonthlyContribution: readMan("idecoMonthlyContribution", 0),
+      idecoContributionYears: readNumber("idecoContributionYears", 0),
+      idecoReceiveStartAge: readNumber("idecoReceiveStartAge", 65),
+      idecoLumpSumRatio: readNumber("idecoLumpSumRatio", 100) / 100,
+      idecoPensionYears: readNumber("idecoPensionYears", 10),
+    },
   };
 }
 
@@ -460,6 +482,8 @@ function renderSummary(
     params.initialNisa + params.initialTaxableRisk + params.initialDefense;
   const totalContrib = initialTotal + params.monthlyContribution * 12 * params.contributionYears;
   const totalWithdrawn = projections.reduce((s, p) => s + p.yearlyWithdrawal, 0);
+  const totalIdecoLumpSum = projections.reduce((s, p) => s + p.yearlyIdecoLumpSum, 0);
+  const totalIdecoPension = projections.reduce((s, p) => s + p.yearlyIdecoPension, 0);
   const nisaLifetimeLimit = params.isCoupled ? NISA_LIFETIME_LIMIT * 2 : NISA_LIFETIME_LIMIT;
   const nisaLifetimeUsageRatio =
     nisaLifetimeLimit > 0 ? last.nisaLifetimeUsed / nisaLifetimeLimit : 0;
@@ -485,6 +509,9 @@ function renderSummary(
       <div class="metric"><div class="metric-label">総引出額（名目）${helpIcon(HELP["totalWithdrawn"]!)}</div><div class="metric-value">${formatMan(totalWithdrawn)}</div></div>
       <div class="metric"><div class="metric-label">最終 NISA 残高${helpIcon(HELP["finalNisa"]!)}</div><div class="metric-value">${formatMan(last.nisaTotal)}</div></div>
       <div class="metric"><div class="metric-label">NISA 生涯枠使用率${helpIcon(HELP["nisaUsage"]!)}</div><div class="metric-value">${formatPercent(nisaLifetimeUsageRatio)}</div></div>
+      <div class="metric"><div class="metric-label">最終 iDeCo 残高${helpIcon(HELP["idecoTotal"]!)}</div><div class="metric-value">${formatMan(last.idecoTotal)}</div></div>
+      <div class="metric"><div class="metric-label">iDeCo 一時金累計${helpIcon(HELP["idecoLumpSum"]!)}</div><div class="metric-value">${formatMan(totalIdecoLumpSum)}</div></div>
+      <div class="metric"><div class="metric-label">iDeCo 年金累計${helpIcon(HELP["idecoPension"]!)}</div><div class="metric-value">${formatMan(totalIdecoPension)}</div></div>
       <div class="metric"><div class="metric-label">MC 中央値残高（実質）${helpIcon(HELP["mcP50"]!)}</div><div class="metric-value">${formatMan(mc.finalP50)}</div></div>
       <div class="metric"><div class="metric-label">MC 悲観値 p10（実質）${helpIcon(HELP["mcP10"]!)}</div><div class="metric-value">${formatMan(mc.finalP10)}</div></div>
       <div class="metric"><div class="metric-label">MC 楽観値 p90（実質）${helpIcon(HELP["mcP90"]!)}</div><div class="metric-value">${formatMan(mc.finalP90)}</div></div>
@@ -618,10 +645,40 @@ function renderRebalanceBadge(info: RebalanceInfo | null): string {
     `税額 ${formatMan(info.taxAmount)}<br>` +
     `受取額 ${formatMan(info.proceeds)}` +
     nisaUsedLine;
+  return renderBadge("rebalance-badge", "●", dirLabel, tip, ` data-direction="${info.direction}"`);
+}
+
+function renderBadge(
+  badgeClass: string,
+  symbol: string,
+  ariaLabel: string,
+  tipHtml: string,
+  attrs: string = "",
+): string {
   return (
-    `<span class="rebalance-badge" data-direction="${info.direction}" tabindex="0" aria-label="${dirLabel}">●` +
-    `<span class="rebalance-tip">${tip}</span></span>`
+    `<span class="${badgeClass}"${attrs} tabindex="0" aria-label="${ariaLabel}">${symbol}` +
+    `<span class="rebalance-tip">${tipHtml}</span></span>`
   );
+}
+
+function renderIdecoLumpSumBadge(info: IdecoPayoutEvent | null): string {
+  if (!info) return "";
+  const tip =
+    `iDeCo 一時金受取<br>` +
+    `受取総額 ${formatMan(info.grossAmount)}<br>` +
+    `税額 ${formatMan(info.taxAmount)}<br>` +
+    `特定リスクへ ${formatMan(info.proceeds)}`;
+  return renderBadge("ideco-lump-badge", "■", "iDeCo一時金", tip);
+}
+
+function renderIdecoPensionBadge(info: IdecoPayoutEvent | null): string {
+  if (!info) return "";
+  const tip =
+    `iDeCo 年金受取<br>` +
+    `受取総額 ${formatMan(info.grossAmount)}<br>` +
+    `税額 ${formatMan(info.taxAmount)}<br>` +
+    `税引後 ${formatMan(info.proceeds)}`;
+  return renderBadge("ideco-pension-badge", "◆", "iDeCo年金", tip);
 }
 
 function renderTransferBadge(info: NisaTransferInfo | null): string {
@@ -631,10 +688,7 @@ function renderTransferBadge(info: NisaTransferInfo | null): string {
     `売却額 ${formatMan(info.sellAmount)}<br>` +
     `税額 ${formatMan(info.taxAmount)}<br>` +
     `NISA買付 ${formatMan(info.proceeds)}`;
-  return (
-    `<span class="transfer-badge" tabindex="0" aria-label="NISA振替">▲` +
-    `<span class="rebalance-tip">${tip}</span></span>`
-  );
+  return renderBadge("transfer-badge", "▲", "NISA振替", tip);
 }
 
 function renderMonthlyTable(monthly: MonthlyProjection[]): string {
@@ -660,9 +714,9 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
     );
     parts.push(
       `<table class="monthly-table"><thead><tr>` +
-        `<th>月</th><th>NISA</th><th>特定リスク</th><th>防衛資産</th><th>合計</th>` +
+        `<th>月</th><th>NISA</th><th>特定リスク</th><th>防衛資産</th><th>iDeCo</th><th>合計</th>` +
         `<th>純引出</th><th>年金</th><th>他収入</th>` +
-        `<th>リスク損益</th><th>防衛損益</th><th>月率</th><th>イベント</th>` +
+        `<th>リスク損益</th><th>防衛損益</th><th>iDeCo損益</th><th>月率</th><th>イベント</th>` +
         `</tr></thead><tbody>`,
     );
     for (const r of rows) {
@@ -670,20 +724,26 @@ function renderMonthlyTable(monthly: MonthlyProjection[]): string {
       const defenseRatio = r.total > 0 ? r.defenseTotal / r.total : null;
       const nisaRatio = r.total > 0 ? r.nisaTotal / r.total : null;
       const taxableRiskRatio = r.total > 0 ? r.taxableRiskTotal / r.total : null;
+      const idecoRatio = r.total > 0 ? r.idecoTotal / r.total : null;
       const event =
-        renderTransferBadge(r.nisaTransferInfo) + renderRebalanceBadge(r.rebalanceInfo);
+        renderTransferBadge(r.nisaTransferInfo) +
+        renderRebalanceBadge(r.rebalanceInfo) +
+        renderIdecoLumpSumBadge(r.idecoLumpSumInfo) +
+        renderIdecoPensionBadge(r.idecoPensionInfo);
       parts.push(
         `<tr>` +
           `<td>${r.month}月</td>` +
           `<td>${formatMan(r.nisaTotal)}${ratioSub(nisaRatio)}</td>` +
           `<td>${formatMan(r.taxableRiskTotal)}${ratioSub(taxableRiskRatio)}</td>` +
           `<td>${formatMan(r.defenseTotal)}${ratioSub(defenseRatio)}</td>` +
+          `<td>${formatMan(r.idecoTotal)}${ratioSub(idecoRatio)}</td>` +
           `<td>${formatMan(r.total)}</td>` +
           `<td>${formatMan(r.monthlyWithdrawal)}</td>` +
           `<td>${formatMan(r.monthlyPension)}</td>` +
           `<td>${formatMan(r.monthlyOtherIncome)}</td>` +
           `<td class="${r.monthlyGainRisk < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainRisk)}</td>` +
           `<td class="${r.monthlyGainDefense < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainDefense)}</td>` +
+          `<td class="${r.monthlyGainIdeco < 0 ? "neg" : ""}">${formatMonthlyGain(r.monthlyGainIdeco)}</td>` +
           `<td class="monthly-rate" data-rate-band="${band}">${formatRate(r.monthlyRate)}</td>` +
           `<td>${event}</td>` +
           `</tr>`,
@@ -771,6 +831,7 @@ function setupResetButton(): void {
     resetInputs();
     syncWithdrawalModeUI();
     syncDefenseUI();
+    syncIdecoUI();
     update();
   });
 }
@@ -840,6 +901,33 @@ function setupDefenseToggle(): void {
   if (!checkbox) return;
   checkbox.addEventListener("change", syncDefenseUI);
   syncDefenseUI();
+}
+
+function syncIdecoUI(): void {
+  const checkbox = document.getElementById("idecoEnabled") as HTMLInputElement | null;
+  if (!checkbox) return;
+  const ids = [
+    "initialIdeco",
+    "initialIdecoGain",
+    "idecoMonthlyContribution",
+    "idecoContributionYears",
+    "idecoReceiveStartAge",
+    "idecoLumpSumRatio",
+    "idecoPensionYears",
+  ];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    const wrap = el?.closest(".field") as HTMLElement | null;
+    if (!wrap) continue;
+    wrap.classList.toggle("hidden", !checkbox.checked);
+  }
+}
+
+function setupIdecoToggle(): void {
+  const checkbox = document.getElementById("idecoEnabled") as HTMLInputElement | null;
+  if (!checkbox) return;
+  checkbox.addEventListener("change", syncIdecoUI);
+  syncIdecoUI();
 }
 
 function bindInputs(): void {
@@ -976,5 +1064,6 @@ document.addEventListener("DOMContentLoaded", () => {
   renderOtherIncomes();
   setupWithdrawalModeToggle();
   setupDefenseToggle();
+  setupIdecoToggle();
   update();
 });
