@@ -3,7 +3,7 @@ import { calculateCompound, type YearlyProjection, type MonthlyProjection } from
 import { simulateMonteCarlo, computeSecurityScore, scoreLabel, type MonteCarloResult } from "../../monte-carlo.ts";
 import type { MonteCarloParams } from "../../monte-carlo.ts";
 
-const DEBOUNCE_MS = 500;
+const DEBOUNCE_MS = 800;
 
 export interface SimulatorResult {
   yearly: YearlyProjection[];
