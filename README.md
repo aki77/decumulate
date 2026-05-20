@@ -89,4 +89,3 @@ pnpm dev
 
 ## TODO
 - 左カラムのレイアウト調整
-- WebWorker化

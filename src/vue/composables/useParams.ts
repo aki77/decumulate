@@ -1,10 +1,12 @@
 import { reactive, computed } from "vue";
+import { refDebounced } from "@vueuse/core";
 import { normalizeOtherIncomes, type OtherIncomeEntry } from "../../other-income.ts";
 import type { MonteCarloParams } from "../../monte-carlo.ts";
 
 export type WithdrawalMode = "amount" | "rate" | "rate-risk";
 
 const MAN = 10000;
+const DEBOUNCE_MS = 200;
 
 export interface Preset {
   annualReturnRate: number;
@@ -200,6 +202,8 @@ export function useParams() {
     };
   });
 
+  const debouncedMcParams = refDebounced(mcParams, DEBOUNCE_MS);
+
   function applyProductPreset(presetKey: string): void {
     const preset = PRESETS[presetKey];
     if (!preset) return;
@@ -226,7 +230,7 @@ export function useParams() {
 
   return {
     state,
-    mcParams,
+    debouncedMcParams,
     applyProductPreset,
     applyDefensePreset,
     addOtherIncome,
@@ -234,5 +238,3 @@ export function useParams() {
     MAN,
   };
 }
-
-export type UseParams = ReturnType<typeof useParams>;

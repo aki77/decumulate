@@ -1,4 +1,4 @@
-import { watch } from "vue";
+import { watchDebounced } from "@vueuse/core";
 import type { OtherIncomeEntry } from "../../other-income.ts";
 import type { ParamsState } from "./useParams.ts";
 
@@ -105,7 +105,10 @@ export function useStorage(state: ParamsState) {
   }
 
   function startAutoSave(): void {
-    watch(state, (newState) => saveToStorage(newState), { deep: true });
+    watchDebounced(state, (newState) => saveToStorage(newState), {
+      deep: true,
+      debounce: 200,
+    });
   }
 
   return { load, reset, startAutoSave };

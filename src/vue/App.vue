@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, toRef } from "vue";
+import { onMounted } from "vue";
 import { useParams, DEFAULT_PARAMS } from "./composables/useParams.ts";
 import { useStorage } from "./composables/useStorage.ts";
 import { useSimulator } from "./composables/useSimulator.ts";
@@ -16,9 +16,9 @@ import CompoundChart from "./components/CompoundChart.vue";
 import MonteCarloChart from "./components/MonteCarloChart.vue";
 import MonthlyDetails from "./components/MonthlyDetails.vue";
 
-const { state, mcParams, applyProductPreset, applyDefensePreset, addOtherIncome, removeOtherIncome } = useParams();
+const { state, debouncedMcParams, applyProductPreset, applyDefensePreset, addOtherIncome, removeOtherIncome } = useParams();
 const storage = useStorage(state);
-const { result } = useSimulator(toRef(mcParams));
+const { result } = useSimulator(debouncedMcParams);
 
 function estimateTargetDefenseRatioPercent(): number {
   const total = state.initialNisaMan + state.initialTaxableRiskMan + state.initialDefenseMan;
@@ -89,14 +89,14 @@ function preventNumberScroll(e: WheelEvent) {
           <ResultSummary
             :yearly="result.yearly"
             :mc="result.mc"
-            :params="mcParams"
+            :params="debouncedMcParams"
             :score="result.score"
             :score-class-name="result.scoreInfo.className"
             :score-label="result.scoreInfo.label"
           />
-          <CompoundChart :projections="result.yearly" :params="mcParams" />
-          <MonteCarloChart :mc="result.mc" :params="mcParams" />
-          <MonthlyDetails :det-monthly="result.monthly" :mc="result.mc" :params="mcParams" />
+          <CompoundChart :projections="result.yearly" :params="debouncedMcParams" />
+          <MonteCarloChart :mc="result.mc" :params="debouncedMcParams" />
+          <MonthlyDetails :det-monthly="result.monthly" :mc="result.mc" :params="debouncedMcParams" />
         </template>
         <p v-else class="chart-note">計算中…</p>
       </section>
