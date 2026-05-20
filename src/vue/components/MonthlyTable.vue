@@ -61,6 +61,9 @@ interface YearGroup {
   baseStr: string | null;
 }
 
+const showIdeco = computed(() => props.params.idecoEnabled);
+const riskColspan = computed(() => showIdeco.value ? 4 : 3);
+
 function buildRiskBreakdownHtml(r: MonthlyProjection): string {
   const lines = [
     `NISA: ${formatMonthlyGain(r.monthlyGainNisa)}`,
@@ -138,39 +141,48 @@ const yearGroups = computed<YearGroup[]>(() => {
       <table class="monthly-table">
         <thead>
           <tr>
-            <th>月</th><th>NISA</th><th>特定リスク</th><th>防衛資産</th><th>iDeCo</th><th>合計</th>
+            <th rowspan="2">月</th>
+            <th :colspan="riskColspan" class="group-header group-risk">リスク資産</th>
+            <th colspan="2" class="group-header group-defense">防衛資産</th>
+            <th rowspan="2">合計</th>
+            <th colspan="3" class="group-header group-cashflow">キャッシュフロー</th>
+            <th rowspan="2">月率</th>
+            <th rowspan="2">イベント</th>
+          </tr>
+          <tr>
+            <th>特定リスク</th><th>NISA</th><th v-if="showIdeco">iDeCo</th><th>リスク損益</th>
+            <th>防衛額</th><th>防衛損益</th>
             <th>純引出</th><th>年金</th><th>他収入</th>
-            <th>リスク損益</th><th>防衛損益</th><th>月率</th><th>イベント</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="row in g.rows" :key="row.src.month">
             <td>{{ row.src.month }}月</td>
             <td>
+              {{ formatMan(row.src.taxableRiskTotal) }}
+              <span v-if="row.src.total > 0" class="cell-sub">({{ formatPercent(row.src.taxableRiskTotal / row.src.total) }})</span>
+            </td>
+            <td>
               {{ formatMan(row.src.nisaTotal) }}
               <span v-if="row.src.total > 0" class="cell-sub">({{ formatPercent(row.src.nisaTotal / row.src.total) }})</span>
             </td>
-            <td>
-              {{ formatMan(row.src.taxableRiskTotal) }}
-              <span v-if="row.src.total > 0" class="cell-sub">({{ formatPercent(row.src.taxableRiskTotal / row.src.total) }})</span>
+            <td v-if="showIdeco">
+              {{ formatMan(row.src.idecoTotal) }}
+              <span v-if="row.src.total > 0" class="cell-sub">({{ formatPercent(row.src.idecoTotal / row.src.total) }})</span>
+            </td>
+            <td :class="row.riskCombined < 0 ? 'neg' : ''">
+              {{ formatMonthlyGain(row.riskCombined) }}
+              <HelpIcon :text="row.riskBreakdownHtml" ariaLabel="リスク損益内訳" />
             </td>
             <td>
               {{ formatMan(row.src.defenseTotal) }}
               <span v-if="row.src.total > 0" class="cell-sub">({{ formatPercent(row.src.defenseTotal / row.src.total) }})</span>
             </td>
-            <td>
-              {{ formatMan(row.src.idecoTotal) }}
-              <span v-if="row.src.total > 0" class="cell-sub">({{ formatPercent(row.src.idecoTotal / row.src.total) }})</span>
-            </td>
+            <td :class="row.src.monthlyGainDefense < 0 ? 'neg' : ''">{{ formatMonthlyGain(row.src.monthlyGainDefense) }}</td>
             <td>{{ formatMan(row.src.total) }}</td>
             <td>{{ formatMan(row.src.monthlyWithdrawal) }}</td>
             <td>{{ formatMan(row.src.monthlyPension) }}</td>
             <td>{{ formatMan(row.src.monthlyOtherIncome) }}</td>
-            <td :class="row.riskCombined < 0 ? 'neg' : ''">
-              {{ formatMonthlyGain(row.riskCombined) }}
-              <HelpIcon :text="row.riskBreakdownHtml" ariaLabel="リスク損益内訳" />
-            </td>
-            <td :class="row.src.monthlyGainDefense < 0 ? 'neg' : ''">{{ formatMonthlyGain(row.src.monthlyGainDefense) }}</td>
             <td class="monthly-rate" :data-rate-band="classifyRateBand(row.src.monthlyRate, false)">{{ formatRate(row.src.monthlyRate) }}</td>
             <td>
               <template v-if="row.src.nisaTransferInfo">
