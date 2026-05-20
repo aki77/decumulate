@@ -273,6 +273,8 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       monthlyPension: number;
       monthlyOtherIncome: number;
       monthlyGainRisk: number;
+      monthlyGainNisa: number;
+      monthlyGainTaxableRisk: number;
       monthlyGainDefense: number;
       monthlyGainIdeco: number;
       rebalanceInfo: RebalanceInfo | null;
@@ -309,6 +311,8 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       monthlyPension: Math.round(raw.monthlyPension),
       monthlyOtherIncome: Math.round(raw.monthlyOtherIncome),
       monthlyGainRisk: Math.round(raw.monthlyGainRisk),
+      monthlyGainNisa: Math.round(raw.monthlyGainNisa),
+      monthlyGainTaxableRisk: Math.round(raw.monthlyGainTaxableRisk),
       monthlyGainDefense: Math.round(raw.monthlyGainDefense),
       monthlyGainIdeco: Math.round(raw.monthlyGainIdeco),
       monthlyGain: Math.round(
@@ -729,6 +733,8 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
             monthlyPension: pensionRecorded,
             monthlyOtherIncome: otherIncomeRecorded,
             monthlyGainRisk: gainRisk,
+            monthlyGainNisa: gainNisa,
+            monthlyGainTaxableRisk: gainTaxable,
             monthlyGainDefense: gainDefense,
             monthlyGainIdeco: gainIdeco,
             rebalanceInfo: rebalanceInfoRecorded,

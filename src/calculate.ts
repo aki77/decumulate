@@ -116,6 +116,8 @@ export interface MonthlyProjection {
   monthlyPension: number;
   monthlyOtherIncome: number;
   monthlyGainRisk: number;
+  monthlyGainNisa: number;
+  monthlyGainTaxableRisk: number;
   monthlyGainDefense: number;
   monthlyGainIdeco: number;
   monthlyGain: number;
@@ -721,6 +723,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         monthlyPension: Math.round(monthPension),
         monthlyOtherIncome: Math.round(monthOtherIncome),
         monthlyGainRisk: Math.round(gainRisk),
+        monthlyGainNisa: Math.round(gainNisa),
+        monthlyGainTaxableRisk: Math.round(gainTaxableRisk),
         monthlyGainDefense: Math.round(gainDefense),
         monthlyGainIdeco: Math.round(gainIdeco),
         monthlyGain: Math.round(gainRisk + gainDefense + gainIdeco),
