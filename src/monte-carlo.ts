@@ -246,6 +246,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   );
   const lifetimeNisaUsed = new Float64Array(N).fill(Math.max(0, nisaInitialLifetimeUsed));
   const yearlyNisaUsed = new Float64Array(N);
+  const nisaTransferByIndex = new Map<number, NisaTransferInfo>();
   const totalPaths = new Float64Array(N);
   const pivotMonthlies: PivotMonthlies = {
     p10: [],
@@ -355,6 +356,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     const yearlyWithdrawals = new Float64Array(N);
 
     yearlyNisaUsed.fill(0);
+    nisaTransferByIndex.clear();
 
     // 年初一括NISA振替（各パスで実行）。N×Y 回 = ホットループ外なので executeNisaTransfer を再利用。
     if (nisaTransferEnabled) {
@@ -379,6 +381,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
         if (r.info) {
           yearlyNisaUsed[i]! += r.info.proceeds;
           lifetimeNisaUsed[i]! += r.info.proceeds;
+          if (pivotMaskByIndex !== null && pivotMaskByIndex[i]! !== 0) {
+            nisaTransferByIndex.set(i, r.info);
+          }
         }
       }
     }
@@ -727,7 +732,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
             monthlyGainDefense: gainDefense,
             monthlyGainIdeco: gainIdeco,
             rebalanceInfo: rebalanceInfoRecorded,
-            nisaTransferInfo: null,
+            nisaTransferInfo: m === 0 ? nisaTransferByIndex.get(i) ?? null : null,
             idecoLumpSumInfo: idecoLumpSumRecorded,
             idecoPensionInfo: idecoPensionRecorded,
           });
