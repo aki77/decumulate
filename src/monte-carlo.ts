@@ -271,6 +271,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       defenseTotal: number;
       idecoTotal: number;
       monthlyWithdrawal: number;
+      monthlyWithdrawalNisa: number;
+      monthlyWithdrawalTaxableRisk: number;
+      monthlyWithdrawalDefense: number;
+      monthlyWithdrawalTaxTaxableRisk: number;
+      monthlyWithdrawalTaxDefense: number;
       monthlyPension: number;
       monthlyOtherIncome: number;
       monthlyGainRisk: number;
@@ -302,6 +307,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
         raw.nisaTotal + raw.taxableRiskTotal + raw.defenseTotal + raw.idecoTotal,
       ),
       monthlyWithdrawal: Math.round(raw.monthlyWithdrawal),
+      monthlyWithdrawalNisa: Math.round(raw.monthlyWithdrawalNisa),
+      monthlyWithdrawalTaxableRisk: Math.round(raw.monthlyWithdrawalTaxableRisk),
+      monthlyWithdrawalDefense: Math.round(raw.monthlyWithdrawalDefense),
+      monthlyWithdrawalTaxTaxableRisk: Math.round(raw.monthlyWithdrawalTaxTaxableRisk),
+      monthlyWithdrawalTaxDefense: Math.round(raw.monthlyWithdrawalTaxDefense),
       baseWithdrawal: Math.round(raw.monthlyWithdrawal),
       rateWithdrawalBasis:
         raw.month === 1 && (isRateMode || isRateRiskMode)
@@ -451,6 +461,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
         const gainTaxable = taxablePaths[i]! - prevTaxable;
         const gainRisk = gainNisa + gainTaxable;
         let monthlyWithdrawalRecorded = 0;
+        let withdrawalFromNisaRecorded = 0;
+        let withdrawalFromTaxableRecorded = 0;
+        let withdrawalFromDefenseRecorded = 0;
+        let withdrawalTaxTaxableRecorded = 0;
+        let withdrawalTaxDefenseRecorded = 0;
         let pensionRecorded = 0;
         let otherIncomeRecorded = 0;
         let rebalanceInfoRecorded: RebalanceInfo | null = null;
@@ -583,6 +598,8 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
             const fromNisa = Math.min(fromRiskSide - fromTaxable, Math.max(nisaPaths[i]!, 0));
 
             let drawnTotal = 0;
+            let taxTaxableRecorded = 0;
+            let taxDefenseRecorded = 0;
             if (fromTaxable > 0) {
               const taxableTotal = taxablePaths[i]!;
               const taxablePrincipal = taxableCostBasis[i]!;
@@ -595,6 +612,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               taxablePaths[i]! -= fromTaxable + tax;
               if (taxablePaths[i]! < 0) taxablePaths[i] = 0;
               drawnTotal += fromTaxable;
+              taxTaxableRecorded = tax;
             }
             if (fromNisa > 0) {
               const nisaTotalLocal = nisaPaths[i]!;
@@ -613,11 +631,19 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               defensePaths[i]! -= fromDefense + tax;
               if (defensePaths[i]! < 0) defensePaths[i] = 0;
               drawnTotal += fromDefense;
+              taxDefenseRecorded = tax;
             }
 
             cumulativeWithdrawals[i]! += drawnTotal;
             yearlyWithdrawals[i]! += drawnTotal;
-            if (recordPivot) monthlyWithdrawalRecorded = drawnTotal;
+            if (recordPivot) {
+              monthlyWithdrawalRecorded = drawnTotal;
+              withdrawalFromNisaRecorded = fromNisa;
+              withdrawalFromTaxableRecorded = fromTaxable;
+              withdrawalFromDefenseRecorded = fromDefense;
+              withdrawalTaxTaxableRecorded = taxTaxableRecorded;
+              withdrawalTaxDefenseRecorded = taxDefenseRecorded;
+            }
           }
         }
 
@@ -731,6 +757,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
               useDefense && defensePaths !== null ? defensePaths[i]! : 0,
             idecoTotal: useIdeco ? idecoPaths![i]! : 0,
             monthlyWithdrawal: monthlyWithdrawalRecorded,
+            monthlyWithdrawalNisa: withdrawalFromNisaRecorded,
+            monthlyWithdrawalTaxableRisk: withdrawalFromTaxableRecorded,
+            monthlyWithdrawalDefense: withdrawalFromDefenseRecorded,
+            monthlyWithdrawalTaxTaxableRisk: withdrawalTaxTaxableRecorded,
+            monthlyWithdrawalTaxDefense: withdrawalTaxDefenseRecorded,
             monthlyPension: pensionRecorded,
             monthlyOtherIncome: otherIncomeRecorded,
             monthlyGainRisk: gainRisk,

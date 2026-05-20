@@ -49,6 +49,7 @@ interface DisplayRow {
   src: MonthlyProjection;
   riskCombined: number;
   riskBreakdownHtml: string;
+  withdrawalBreakdownHtml: string;
 }
 
 interface YearGroup {
@@ -75,6 +76,26 @@ function buildRiskBreakdownHtml(r: MonthlyProjection): string {
   return lines.join("<br>");
 }
 
+function buildWithdrawalBreakdownHtml(r: MonthlyProjection): string {
+  const lines: string[] = [];
+  if (r.monthlyWithdrawalTaxableRisk > 0) {
+    const taxStr = r.monthlyWithdrawalTaxTaxableRisk > 0
+      ? ` (税 ${formatMan(r.monthlyWithdrawalTaxTaxableRisk)})`
+      : "";
+    lines.push(`特定リスク: ${formatMan(r.monthlyWithdrawalTaxableRisk)}${taxStr}`);
+  }
+  if (r.monthlyWithdrawalNisa > 0) {
+    lines.push(`NISA: ${formatMan(r.monthlyWithdrawalNisa)}`);
+  }
+  if (r.monthlyWithdrawalDefense > 0) {
+    const taxStr = r.monthlyWithdrawalTaxDefense > 0
+      ? ` (税 ${formatMan(r.monthlyWithdrawalTaxDefense)})`
+      : "";
+    lines.push(`防衛: ${formatMan(r.monthlyWithdrawalDefense)}${taxStr}`);
+  }
+  return lines.join("<br>");
+}
+
 const yearGroups = computed<YearGroup[]>(() => {
   const { monthly, params } = props;
   if (monthly.length === 0) return [];
@@ -85,6 +106,7 @@ const yearGroups = computed<YearGroup[]>(() => {
       src: m,
       riskCombined: m.monthlyGainRisk + m.monthlyGainIdeco,
       riskBreakdownHtml: buildRiskBreakdownHtml(m),
+      withdrawalBreakdownHtml: buildWithdrawalBreakdownHtml(m),
     };
     const list = byYear.get(m.year);
     if (list) list.push(row);
@@ -180,7 +202,14 @@ const yearGroups = computed<YearGroup[]>(() => {
             </td>
             <td :class="row.src.monthlyGainDefense < 0 ? 'neg' : ''">{{ formatMonthlyGain(row.src.monthlyGainDefense) }}</td>
             <td>{{ formatMan(row.src.total) }}</td>
-            <td>{{ formatMan(row.src.monthlyWithdrawal) }}</td>
+            <td>
+              {{ formatMan(row.src.monthlyWithdrawal) }}
+              <HelpIcon
+                v-if="row.withdrawalBreakdownHtml"
+                :text="row.withdrawalBreakdownHtml"
+                ariaLabel="純引出内訳"
+              />
+            </td>
             <td>{{ formatMan(row.src.monthlyPension) }}</td>
             <td>{{ formatMan(row.src.monthlyOtherIncome) }}</td>
             <td class="monthly-rate" :data-rate-band="classifyRateBand(row.src.monthlyRate, false)">{{ formatRate(row.src.monthlyRate) }}</td>

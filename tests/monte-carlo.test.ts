@@ -652,3 +652,37 @@ test("simulateMonteCarlo - NISA振替OFF なら pivot 月次の nisaTransferInfo
     }
   }
 });
+
+// --- monthlyWithdrawal 内訳 ---
+
+test("simulateMonteCarlo - pivot 月次の monthlyWithdrawal は内訳3バケットの和に等しい", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    initialNisa: 1000000,
+    initialNisaGain: 100000,
+    initialTaxableRisk: 1000000,
+    initialTaxableRiskGain: 200000,
+    initialDefense: 500000,
+    initialDefenseGain: 50000,
+    targetDefenseRatio: 25,
+    withdrawalStartYear: 0,
+    withdrawalYears: 3,
+    fixedMonthlyWithdrawal: 30000,
+    defensePriorityOnDrawdown: false,
+  };
+  const result = simulateMonteCarlo(params);
+  for (const k of PERCENTILE_KEYS) {
+    const rows = result.pivotMonthlies[k as PercentileKey];
+    for (const row of rows) {
+      if (row.monthlyWithdrawal <= 0) continue;
+      const sum =
+        row.monthlyWithdrawalNisa +
+        row.monthlyWithdrawalTaxableRisk +
+        row.monthlyWithdrawalDefense;
+      assert.ok(
+        Math.abs(row.monthlyWithdrawal - sum) <= 1,
+        `${k} year=${row.year}month=${row.month}: total=${row.monthlyWithdrawal} sum=${sum}`,
+      );
+    }
+  }
+});

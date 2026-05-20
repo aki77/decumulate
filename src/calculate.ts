@@ -112,6 +112,11 @@ export interface MonthlyProjection {
   idecoTotal: number;
   total: number;
   monthlyWithdrawal: number;
+  monthlyWithdrawalNisa: number;
+  monthlyWithdrawalTaxableRisk: number;
+  monthlyWithdrawalDefense: number;
+  monthlyWithdrawalTaxTaxableRisk: number;
+  monthlyWithdrawalTaxDefense: number;
   baseWithdrawal: number;
   rateWithdrawalBasis: number | null;
   monthlyPension: number;
@@ -595,6 +600,11 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
       const currentTotal = nisaTotal + taxableRiskTotal + defenseTotal;
 
       let monthlyWithdrawal = 0;
+      let withdrawalFromNisa = 0;
+      let withdrawalFromTaxableRisk = 0;
+      let withdrawalFromDefense = 0;
+      let withdrawalTaxTaxableRisk = 0;
+      let withdrawalTaxDefense = 0;
       let baseWithdrawal = 0;
       let monthPension = 0;
       let monthOtherIncome = 0;
@@ -645,6 +655,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
           taxableRiskTotal,
           nisaTotal,
         );
+        const prevTaxableRiskTotalForTax = taxableRiskTotal;
+        const prevDefenseTotalForTax = defenseTotal;
         [taxableRiskTotal, taxableRiskPrincipal] = withdrawFromBucket(
           taxableRiskTotal,
           taxableRiskPrincipal,
@@ -664,6 +676,12 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
           taxRate,
         );
 
+        // withdrawFromBucket: newTotal = total - amount - tax → tax = prevTotal - newTotal - amount
+        withdrawalTaxTaxableRisk = prevTaxableRiskTotalForTax - taxableRiskTotal - fromTaxableRisk;
+        withdrawalTaxDefense = prevDefenseTotalForTax - defenseTotal - fromDefense;
+        withdrawalFromTaxableRisk = fromTaxableRisk;
+        withdrawalFromNisa = fromNisa;
+        withdrawalFromDefense = fromDefense;
         monthlyWithdrawal = fromTaxableRisk + fromNisa + fromDefense;
         yearlyWithdrawal += monthlyWithdrawal;
         yearlyPension += monthPension;
@@ -719,6 +737,11 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         idecoTotal: Math.round(idecoState.total),
         total: Math.round(nisaTotal + taxableRiskTotal + defenseTotal + idecoState.total),
         monthlyWithdrawal: Math.round(monthlyWithdrawal),
+        monthlyWithdrawalNisa: Math.round(withdrawalFromNisa),
+        monthlyWithdrawalTaxableRisk: Math.round(withdrawalFromTaxableRisk),
+        monthlyWithdrawalDefense: Math.round(withdrawalFromDefense),
+        monthlyWithdrawalTaxTaxableRisk: Math.round(withdrawalTaxTaxableRisk),
+        monthlyWithdrawalTaxDefense: Math.round(withdrawalTaxDefense),
         baseWithdrawal: Math.round(baseWithdrawal),
         rateWithdrawalBasis,
         monthlyPension: Math.round(monthPension),
