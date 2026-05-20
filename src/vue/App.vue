@@ -11,7 +11,9 @@ import InputPeriod from "./components/InputPeriod.vue";
 import InputWithdrawal from "./components/InputWithdrawal.vue";
 import InputIdeco from "./components/InputIdeco.vue";
 import InputPension from "./components/InputPension.vue";
-import ResultSummary from "./components/ResultSummary.vue";
+import ScoreHero from "./components/ScoreHero.vue";
+import KeyMetrics from "./components/KeyMetrics.vue";
+import MetricsDetail from "./components/MetricsDetail.vue";
 import CompoundChart from "./components/CompoundChart.vue";
 import MonteCarloChart from "./components/MonteCarloChart.vue";
 import MonthlyDetails from "./components/MonthlyDetails.vue";
@@ -58,6 +60,31 @@ function preventNumberScroll(e: WheelEvent) {
     </header>
 
     <main class="layout">
+      <section class="panel results">
+        <h2>結果</h2>
+        <template v-if="result">
+          <ScoreHero
+            :score="result.score"
+            :score-class-name="result.scoreInfo.className"
+            :score-label="result.scoreInfo.label"
+          />
+          <KeyMetrics
+            :yearly="result.yearly"
+            :mc="result.mc"
+            :params="debouncedMcParams"
+          />
+          <CompoundChart :projections="result.yearly" :params="debouncedMcParams" />
+          <MonteCarloChart :mc="result.mc" :params="debouncedMcParams" />
+          <MetricsDetail
+            :yearly="result.yearly"
+            :mc="result.mc"
+            :params="debouncedMcParams"
+          />
+          <MonthlyDetails :det-monthly="result.monthly" :mc="result.mc" :params="debouncedMcParams" />
+        </template>
+        <p v-else class="chart-note">計算中…</p>
+      </section>
+
       <section class="panel inputs">
         <h2>入力</h2>
         <InputBasic v-model="state" />
@@ -81,24 +108,6 @@ function preventNumberScroll(e: WheelEvent) {
         <div class="form-actions">
           <button type="button" class="reset-button" @click="handleReset">入力をリセット</button>
         </div>
-      </section>
-
-      <section class="panel results">
-        <h2>結果</h2>
-        <template v-if="result">
-          <ResultSummary
-            :yearly="result.yearly"
-            :mc="result.mc"
-            :params="debouncedMcParams"
-            :score="result.score"
-            :score-class-name="result.scoreInfo.className"
-            :score-label="result.scoreInfo.label"
-          />
-          <CompoundChart :projections="result.yearly" :params="debouncedMcParams" />
-          <MonteCarloChart :mc="result.mc" :params="debouncedMcParams" />
-          <MonthlyDetails :det-monthly="result.monthly" :mc="result.mc" :params="debouncedMcParams" />
-        </template>
-        <p v-else class="chart-note">計算中…</p>
       </section>
     </main>
 
@@ -129,18 +138,12 @@ function preventNumberScroll(e: WheelEvent) {
 }
 
 .layout {
-  display: grid;
-  grid-template-columns: minmax(280px, 380px) 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 20px;
   padding: 20px 24px;
   max-width: 1400px;
   margin: 0 auto;
-}
-
-@media (max-width: 900px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
 }
 
 .panel {

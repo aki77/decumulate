@@ -1,0 +1,97 @@
+<script setup lang="ts">
+import HelpIcon from "./HelpIcon.vue";
+import { useMetrics } from "../composables/useMetrics.ts";
+import { formatMan, formatPercent } from "../format.ts";
+import type { YearlyProjection, CalculateParams } from "../../calculate.ts";
+import type { MonteCarloResult } from "../../monte-carlo.ts";
+
+const props = defineProps<{
+  yearly: YearlyProjection[];
+  mc: MonteCarloResult;
+  params: CalculateParams;
+}>();
+
+const HELP = {
+  totalContrib: "初期投資額 + 月額積立 × 12 × 積立年数。自身が拠出した元本の合計。",
+  tax: "特定口座を想定した含み益への課税（20.315%）の累計概算。",
+  mcP10: "最終資産分布の下位 10% タイル。下振れシナリオの目安。",
+  mcP90: "最終資産分布の上位 10% タイル。上振れシナリオの目安。",
+  finalNisa: "シミュレーション最終年のNISA口座残高（時価, 名目値）。NISAは非課税のため、取り崩しを最後に回すと有利。",
+  nisaUsage: "NISA生涯枠（1人1800万 / 夫婦3600万）のうち、買付額ベースで何%を使ったか。",
+  idecoTotal: "シミュレーション最終年のiDeCo残高（時価, 名目値）。受取開始後は減少していく。",
+  idecoLumpSum: "受取開始月に一時金として受け取った税引後合計（特定リスクに移管済み）。",
+  idecoPension: "iDeCo年金受取の累計（税引後）。月次取り崩しの支出に充当される。",
+} as const;
+
+const metrics = useMetrics(() => props.yearly, () => props.params);
+</script>
+
+<template>
+  <details class="metrics-detail">
+    <summary>詳細メトリクス</summary>
+    <div class="metric-grid">
+      <div class="metric">
+        <div class="metric-label">積立元本合計<HelpIcon :text="HELP.totalContrib" /></div>
+        <div class="metric-value">{{ formatMan(metrics.totalContrib) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">想定税金<HelpIcon :text="HELP.tax" /></div>
+        <div class="metric-value">{{ formatMan(metrics.last.tax) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">最終 NISA 残高<HelpIcon :text="HELP.finalNisa" /></div>
+        <div class="metric-value">{{ formatMan(metrics.last.nisaTotal) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">NISA 生涯枠使用率<HelpIcon :text="HELP.nisaUsage" /></div>
+        <div class="metric-value">{{ formatPercent(metrics.nisaLifetimeUsageRatio) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">最終 iDeCo 残高<HelpIcon :text="HELP.idecoTotal" /></div>
+        <div class="metric-value">{{ formatMan(metrics.last.idecoTotal) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">iDeCo 一時金累計<HelpIcon :text="HELP.idecoLumpSum" /></div>
+        <div class="metric-value">{{ formatMan(metrics.totalIdecoLumpSum) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">iDeCo 年金累計<HelpIcon :text="HELP.idecoPension" /></div>
+        <div class="metric-value">{{ formatMan(metrics.totalIdecoPension) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">MC 悲観値 p10（実質）<HelpIcon :text="HELP.mcP10" /></div>
+        <div class="metric-value">{{ formatMan(mc.finalP10) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">MC 楽観値 p90（実質）<HelpIcon :text="HELP.mcP90" /></div>
+        <div class="metric-value">{{ formatMan(mc.finalP90) }}</div>
+      </div>
+    </div>
+  </details>
+</template>
+
+<style scoped>
+.metrics-detail {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.metrics-detail > summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  user-select: none;
+}
+
+.metrics-detail[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.metrics-detail .metric-grid {
+  padding: 12px 14px;
+}
+</style>

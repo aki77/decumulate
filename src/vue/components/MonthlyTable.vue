@@ -2,23 +2,12 @@
 import { computed } from "vue";
 import type { MonthlyProjection, CalculateParams } from "../../calculate.ts";
 import HelpIcon from "./HelpIcon.vue";
+import { toMan, formatMan, formatPercent } from "../format.ts";
 
 const props = defineProps<{
   monthly: MonthlyProjection[];
   params: CalculateParams;
 }>();
-
-const toMan = (v: number) => v / 10000;
-
-function formatMan(yen: number): string {
-  if (!Number.isFinite(yen)) return "-";
-  return `${Math.round(toMan(yen)).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}万円`;
-}
-
-function formatPercent(v: number): string {
-  if (!Number.isFinite(v)) return "-";
-  return `${(v * 100).toFixed(1)}%`;
-}
 
 function formatMonthlyGain(yen: number): string {
   if (!Number.isFinite(yen)) return "-";

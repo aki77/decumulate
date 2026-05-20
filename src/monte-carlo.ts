@@ -64,9 +64,16 @@ export interface SecurityScoreInput {
   medianFinal: number;
 }
 
+export type ScoreClassName =
+  | "score-excellent"
+  | "score-safe"
+  | "score-caution"
+  | "score-warn"
+  | "score-danger";
+
 export interface ScoreLabelResult {
   label: string;
-  className: string;
+  className: ScoreClassName;
 }
 
 function mulberry32(seed: number): () => number {
