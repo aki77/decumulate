@@ -16,7 +16,7 @@ function onPresetChange(e: Event) {
 <template>
   <div class="field-group">
     <h3>運用</h3>
-    <div class="field">
+    <div class="field field--full">
       <label for="productPreset">商品プリセット</label>
       <select id="productPreset" :value="state.productPreset" @change="onPresetChange">
         <option v-for="(preset, key) in PRESETS" :key="key" :value="key">

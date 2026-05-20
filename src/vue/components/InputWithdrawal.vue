@@ -13,7 +13,7 @@ const isRateMode = computed(
 <template>
   <div class="field-group">
     <h3>取り崩し</h3>
-    <div class="field">
+    <div class="field field--full">
       <label for="withdrawalMode">
         取り崩しモード
         <HelpIcon text="「月額」は毎月一定額を引き出す方式。「年率（Trinity Study）」は初年度資産にかかる%を毎年インフレ調整。「年率×リスク資産」は毎年初にその時点のリスク資産に率をかけて月額を再計算（資産変動に追従、インフレ調整なし）。" />

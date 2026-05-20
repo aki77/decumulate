@@ -16,7 +16,7 @@ function onPresetChange(e: Event) {
 <template>
   <div class="field-group">
     <h3>防衛資産（2バケット戦略）</h3>
-    <div class="field">
+    <div class="field field--full">
       <label for="defenseProductPreset">防衛資産プリセット</label>
       <select id="defenseProductPreset" :value="state.defenseProductPreset" @change="onPresetChange">
         <option v-for="(preset, key) in DEFENSE_PRESETS" :key="key" :value="key">

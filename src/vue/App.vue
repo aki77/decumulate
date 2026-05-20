@@ -60,31 +60,6 @@ function preventNumberScroll(e: WheelEvent) {
     </header>
 
     <main class="layout">
-      <section class="panel results">
-        <h2>結果</h2>
-        <template v-if="result">
-          <ScoreHero
-            :score="result.score"
-            :score-class-name="result.scoreInfo.className"
-            :score-label="result.scoreInfo.label"
-          />
-          <KeyMetrics
-            :yearly="result.yearly"
-            :mc="result.mc"
-            :params="debouncedMcParams"
-          />
-          <CompoundChart :projections="result.yearly" :params="debouncedMcParams" />
-          <MonteCarloChart :mc="result.mc" :params="debouncedMcParams" />
-          <MetricsDetail
-            :yearly="result.yearly"
-            :mc="result.mc"
-            :params="debouncedMcParams"
-          />
-          <MonthlyDetails :det-monthly="result.monthly" :mc="result.mc" :params="debouncedMcParams" />
-        </template>
-        <p v-else class="chart-note">計算中…</p>
-      </section>
-
       <section class="panel inputs">
         <h2>入力</h2>
         <InputBasic v-model="state" />
@@ -108,6 +83,31 @@ function preventNumberScroll(e: WheelEvent) {
         <div class="form-actions">
           <button type="button" class="reset-button" @click="handleReset">入力をリセット</button>
         </div>
+      </section>
+
+      <section class="panel results">
+        <h2>結果</h2>
+        <template v-if="result">
+          <ScoreHero
+            :score="result.score"
+            :score-class-name="result.scoreInfo.className"
+            :score-label="result.scoreInfo.label"
+          />
+          <KeyMetrics
+            :yearly="result.yearly"
+            :mc="result.mc"
+            :params="debouncedMcParams"
+          />
+          <CompoundChart :projections="result.yearly" :params="debouncedMcParams" />
+          <MonteCarloChart :mc="result.mc" :params="debouncedMcParams" />
+          <MetricsDetail
+            :yearly="result.yearly"
+            :mc="result.mc"
+            :params="debouncedMcParams"
+          />
+          <MonthlyDetails :det-monthly="result.monthly" :mc="result.mc" :params="debouncedMcParams" />
+        </template>
+        <p v-else class="chart-note">計算中…</p>
       </section>
     </main>
 

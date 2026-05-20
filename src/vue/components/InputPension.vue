@@ -16,7 +16,7 @@ const periodUnit = computed(() => (state.value.currentAge != null ? "歳" : "年
 <template>
   <div class="field-group">
     <h3>年金・その他収入</h3>
-    <div class="field">
+    <div class="field field--full">
       <label for="basePension">
         年金月額（65歳基準, 額面, 万円）
         <HelpIcon text="65歳開始時の額面（税・社会保険控除前）月額。受給開始年齢を変えると繰上げ/繰下げで自動調整される。" />
@@ -35,7 +35,7 @@ const periodUnit = computed(() => (state.value.currentAge != null ? "歳" : "年
       </label>
       <input id="pensionStartAge" v-model.number="state.pensionStartAge" type="number" min="60" max="75" step="1" />
     </div>
-    <div class="field other-incomes-field">
+    <div class="field field--full other-incomes-field">
       <div class="other-incomes-header">
         <label>その他の月収（手取り）</label>
         <HelpIcon text="副業・講演料・家賃収入など、年金以外の収入を期間付きで複数登録できます。例:「副業300万円/年を今後5年」。年齢未設定時は「経過年（0=現在）」として扱います。終了は exclusive（30〜35なら 30,31,32,33,34歳の5年間）。" />
