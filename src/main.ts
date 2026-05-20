@@ -217,6 +217,7 @@ function readParams(): MonteCarloParams {
     otherIncomes: normalizeOtherIncomes(otherIncomesState, currentAge, totalYears, MAN),
     defenseAnnualReturnRate: readNumber("defenseAnnualReturnRate", 0.5),
     defenseVolatility: readNumber("defenseVolatility", 0),
+    targetDefenseRatio: readNumber("targetDefenseRatioPercent", 0),
     defensePriorityOnDrawdown: readChecked("defensePriorityOnDrawdown"),
     drawdownThresholdPercent: readNumber("drawdownThresholdPercent", 10),
     rebalanceThresholdPoint: readNumber("rebalanceThresholdPoint", 5),

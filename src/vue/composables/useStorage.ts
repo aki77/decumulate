@@ -2,7 +2,7 @@ import { watch } from "vue";
 import type { OtherIncomeEntry } from "../../other-income.ts";
 import type { ParamsState } from "./useParams.ts";
 
-const STORAGE_KEY = "decumulate:inputs:v2";
+const STORAGE_KEY = "decumulate:inputs:v3";
 
 type StoredState = Omit<ParamsState, "otherIncomes"> & { otherIncomes: OtherIncomeEntry[] };
 
@@ -36,6 +36,7 @@ function loadFromStorage(): Partial<StoredState> | null {
       "withdrawalStartYear", "withdrawalYears", "fixedMonthlyWithdrawalMan",
       "withdrawalRate", "monthlyWithdrawalFloorMan", "monthlyWithdrawalCeilingMan",
       "basePensionMan", "pensionStartAge", "defenseAnnualReturnRate", "defenseVolatility",
+      "targetDefenseRatioPercent",
       "drawdownThresholdPercent", "rebalanceThresholdPoint",
       "initialIdecoMan", "initialIdecoGainMan", "idecoMonthlyContributionMan",
       "idecoContributionYears", "idecoReceiveStartAge", "idecoLumpSumRatio", "idecoPensionYears",
@@ -90,10 +91,11 @@ function saveToStorage(state: ParamsState): void {
 }
 
 export function useStorage(state: ParamsState) {
-  function load(): void {
+  function load(): boolean {
     const saved = loadFromStorage();
-    if (!saved) return;
+    if (!saved) return false;
     Object.assign(state, saved);
+    return true;
   }
 
   function reset(): void {

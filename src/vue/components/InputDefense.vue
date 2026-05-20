@@ -40,6 +40,13 @@ function onPresetChange(e: Event) {
       </label>
       <input id="defenseVolatility" v-model.number="state.defenseVolatility" type="number" min="0" max="20" step="0.5" />
     </div>
+    <div class="field">
+      <label for="targetDefenseRatioPercent">
+        目標防衛割合（%）
+        <HelpIcon text="資産総額（リスク＋防衛＋iDeCo）に対する防衛資産の目標比率。月末リバランスはこの比率に戻すよう動作する。0% にすると防衛バケットを使わない運用。初回起動時は初期残高から自動算出される。" />
+      </label>
+      <input id="targetDefenseRatioPercent" v-model.number="state.targetDefenseRatioPercent" type="number" min="0" max="100" step="1" />
+    </div>
     <div class="field checkbox-field">
       <input id="defensePriorityOnDrawdown" v-model="state.defensePriorityOnDrawdown" type="checkbox" />
       <label for="defensePriorityOnDrawdown">下落時は防衛資産から優先的に取り崩す</label>

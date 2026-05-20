@@ -116,6 +116,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     otherIncomes,
     defenseAnnualReturnRate,
     defenseVolatility,
+    targetDefenseRatio,
     defensePriorityOnDrawdown,
     drawdownThresholdPercent,
     rebalanceThresholdPoint,
@@ -131,9 +132,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const ri = inflationRate / 100;
   const taxRate = TAX_RATE;
 
-  const initialTotal = initialNisa + initialTaxableRisk + initialDefense;
-  const dr = initialTotal > 0 ? initialDefense / initialTotal : 0;
+  const dr = Math.max(0, Math.min(1, targetDefenseRatio / 100));
   const useDefense = dr > 0;
+  const initialTotal = initialNisa + initialTaxableRisk + initialDefense;
 
   const nisaAnnualLimit = isCoupled ? NISA_ANNUAL_LIMIT * 2 : NISA_ANNUAL_LIMIT;
   const nisaLifetimeLimit = isCoupled ? NISA_LIFETIME_LIMIT * 2 : NISA_LIFETIME_LIMIT;

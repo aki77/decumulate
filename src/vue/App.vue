@@ -20,14 +20,24 @@ const { state, mcParams, applyProductPreset, applyDefensePreset, addOtherIncome,
 const storage = useStorage(state);
 const { result } = useSimulator(toRef(mcParams));
 
+function estimateTargetDefenseRatioPercent(): number {
+  const total = state.initialNisaMan + state.initialTaxableRiskMan + state.initialDefenseMan;
+  if (total <= 0) return 0;
+  return Math.round((state.initialDefenseMan / total) * 1000) / 10;
+}
+
 onMounted(() => {
-  storage.load();
+  const loaded = storage.load();
+  if (!loaded) {
+    state.targetDefenseRatioPercent = estimateTargetDefenseRatioPercent();
+  }
   storage.startAutoSave();
 });
 
 function handleReset() {
   storage.reset();
   Object.assign(state, { ...DEFAULT_PARAMS });
+  state.targetDefenseRatioPercent = estimateTargetDefenseRatioPercent();
 }
 
 function preventNumberScroll(e: WheelEvent) {

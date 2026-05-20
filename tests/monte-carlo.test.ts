@@ -37,6 +37,7 @@ const BASE_PARAMS: MonteCarloParams = {
   otherIncomes: [],
   defenseAnnualReturnRate: 0,
   defenseVolatility: 0,
+  targetDefenseRatio: 0,
   defensePriorityOnDrawdown: false,
   drawdownThresholdPercent: 10,
   rebalanceThresholdPoint: 5,
@@ -56,13 +57,15 @@ const BASE_PARAMS: MonteCarloParams = {
   },
 };
 
-// initialAmount + defenseRatio(%) を新シグネチャに変換するヘルパ
+// initialAmount + defenseRatio(%) を新シグネチャに変換するヘルパ。
+// targetDefenseRatio も初期残高比と同じ値を渡して旧挙動を再現する。
 function withBuckets(initialAmount: number, defenseRatioPercent = 0): Partial<MonteCarloParams> {
   const dr = defenseRatioPercent / 100;
   return {
     initialNisa: initialAmount * (1 - dr),
     initialTaxableRisk: 0,
     initialDefense: initialAmount * dr,
+    targetDefenseRatio: defenseRatioPercent,
   };
 }
 

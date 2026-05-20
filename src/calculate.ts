@@ -54,6 +54,7 @@ export interface CalculateParams {
 
   // 防衛資産
   defenseAnnualReturnRate: number;
+  targetDefenseRatio: number;
   rebalanceThresholdPoint: number;
   defensePriorityOnDrawdown: boolean;
 
@@ -410,6 +411,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     currentAge,
     otherIncomes,
     defenseAnnualReturnRate,
+    targetDefenseRatio,
     rebalanceThresholdPoint,
     defensePriorityOnDrawdown,
     isCoupled,
@@ -451,9 +453,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
   const idecoReceiveOffset = idecoReceiveStartYearOffset(ideco.idecoReceiveStartAge, currentAge);
   const idecoReceiveAge = computeIdecoReceiveAge(ideco.idecoReceiveStartAge, currentAge);
 
-  // defenseRatio は初期総資産から導出（リバランスの目標値として使う）
-  const initialTotal = nisaTotal + taxableRiskTotal + defenseTotal + idecoState.total;
-  const dr = initialTotal > 0 ? defenseTotal / initialTotal : 0;
+  // 目標防衛割合（リバランスの目標値）。UI 入力（%）を 0–1 にクランプ。
+  const dr = Math.max(0, Math.min(1, targetDefenseRatio / 100));
 
   let lifetimeNisaUsed = Math.max(0, nisaInitialLifetimeUsed);
 
