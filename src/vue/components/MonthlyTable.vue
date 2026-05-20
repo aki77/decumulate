@@ -52,6 +52,11 @@ interface DisplayRow {
   withdrawalBreakdownHtml: string;
 }
 
+interface BaseInfo {
+  summary: string;
+  detailHtml: string;
+}
+
 interface YearGroup {
   year: number;
   age: number | null;
@@ -59,7 +64,7 @@ interface YearGroup {
   yearlyGain: number;
   yearlyRate: number;
   yearBand: RateBand;
-  baseStr: string | null;
+  base: BaseInfo | null;
 }
 
 const showIdeco = computed(() => props.params.idecoEnabled);
@@ -120,7 +125,7 @@ const yearGroups = computed<YearGroup[]>(() => {
     const yearlyGain = rows.reduce((s, r) => s + r.src.monthlyGain, 0);
     const yearlyRate = rows.reduce((acc, r) => acc * (1 + r.src.monthlyRate), 1) - 1;
     const yearBand = classifyRateBand(yearlyRate, true);
-    let baseStr: string | null = null;
+    let base: BaseInfo | null = null;
     if (first.baseWithdrawal > 0) {
       const pension = first.monthlyPension;
       const other = first.monthlyOtherIncome;
@@ -136,9 +141,9 @@ const yearGroups = computed<YearGroup[]>(() => {
       if (pension > 0) lines.push(`年金: ${formatMan(pension)}`);
       if (other > 0) lines.push(`その他収入: ${formatMan(other)}`);
       if (pension > 0 || other > 0) lines.push(`合計: ${formatMan(total)}`);
-      baseStr = `合計生活費 ${formatMan(total)}|${lines.join("<br>")}`;
+      base = { summary: formatMan(total), detailHtml: lines.join("<br>") };
     }
-    groups.push({ year, age, rows, yearlyGain, yearlyRate, yearBand, baseStr });
+    groups.push({ year, age, rows, yearlyGain, yearlyRate, yearBand, base });
   }
   return groups;
 });
@@ -149,10 +154,10 @@ const yearGroups = computed<YearGroup[]>(() => {
     <details class="monthly-year">
       <summary>
         {{ g.age != null ? `${g.year}年目 / ${g.age}歳` : `${g.year}年目` }}
-        <template v-if="g.baseStr">
+        <template v-if="g.base">
           <span class="year-summary">
-            合計生活費 {{ g.baseStr.split('|')[0] }}
-            <span class="year-summary-help help-icon" tabindex="0" aria-label="内訳">?<span class="help-tip year-summary-tip" v-html="g.baseStr.split('|')[1]"></span></span>
+            合計生活費 {{ g.base.summary }}
+            <HelpIcon :text="g.base.detailHtml" ariaLabel="内訳" compact />
           </span>
           {{ ' ' }}
         </template>
@@ -215,16 +220,16 @@ const yearGroups = computed<YearGroup[]>(() => {
             <td class="monthly-rate" :data-rate-band="classifyRateBand(row.src.monthlyRate, false)">{{ formatRate(row.src.monthlyRate) }}</td>
             <td>
               <template v-if="row.src.nisaTransferInfo">
-                <span class="transfer-badge" tabindex="0" aria-label="NISA振替">▲<span class="rebalance-tip" v-html="`特定 → NISA 振替<br>売却額 ${formatMan(row.src.nisaTransferInfo.sellAmount)}<br>税額 ${formatMan(row.src.nisaTransferInfo.taxAmount)}<br>NISA買付 ${formatMan(row.src.nisaTransferInfo.proceeds)}`"></span></span>
+                <span class="event-badge" data-kind="transfer" tabindex="0" aria-label="NISA振替">▲<span class="event-tip" v-html="`特定 → NISA 振替<br>売却額 ${formatMan(row.src.nisaTransferInfo.sellAmount)}<br>税額 ${formatMan(row.src.nisaTransferInfo.taxAmount)}<br>NISA買付 ${formatMan(row.src.nisaTransferInfo.proceeds)}`"></span></span>
               </template>
               <template v-if="row.src.rebalanceInfo">
-                <span class="rebalance-badge" :data-direction="row.src.rebalanceInfo.direction" tabindex="0" :aria-label="row.src.rebalanceInfo.direction === 'risk-to-defense' ? 'リスク → 防衛' : '防衛 → リスク'">●<span class="rebalance-tip" v-html="`${row.src.rebalanceInfo.direction === 'risk-to-defense' ? 'リスク → 防衛' : '防衛 → リスク'}<br>売却額 ${formatMan(row.src.rebalanceInfo.sellAmount)}<br>税額 ${formatMan(row.src.rebalanceInfo.taxAmount)}<br>受取額 ${formatMan(row.src.rebalanceInfo.proceeds)}${row.src.rebalanceInfo.nisaUsed > 0 ? '<br>うちNISA枠充当 ' + formatMan(row.src.rebalanceInfo.nisaUsed) : ''}`"></span></span>
+                <span class="event-badge" data-kind="rebalance" :data-direction="row.src.rebalanceInfo.direction" tabindex="0" :aria-label="row.src.rebalanceInfo.direction === 'risk-to-defense' ? 'リスク → 防衛' : '防衛 → リスク'">●<span class="event-tip" v-html="`${row.src.rebalanceInfo.direction === 'risk-to-defense' ? 'リスク → 防衛' : '防衛 → リスク'}<br>売却額 ${formatMan(row.src.rebalanceInfo.sellAmount)}<br>税額 ${formatMan(row.src.rebalanceInfo.taxAmount)}<br>受取額 ${formatMan(row.src.rebalanceInfo.proceeds)}${row.src.rebalanceInfo.nisaUsed > 0 ? '<br>うちNISA枠充当 ' + formatMan(row.src.rebalanceInfo.nisaUsed) : ''}`"></span></span>
               </template>
               <template v-if="row.src.idecoLumpSumInfo">
-                <span class="ideco-lump-badge" tabindex="0" aria-label="iDeCo一時金">■<span class="rebalance-tip" v-html="`iDeCo 一時金受取<br>受取総額 ${formatMan(row.src.idecoLumpSumInfo.grossAmount)}<br>税額 ${formatMan(row.src.idecoLumpSumInfo.taxAmount)}<br>特定リスクへ ${formatMan(row.src.idecoLumpSumInfo.proceeds)}`"></span></span>
+                <span class="event-badge" data-kind="ideco-lump" tabindex="0" aria-label="iDeCo一時金">■<span class="event-tip" v-html="`iDeCo 一時金受取<br>受取総額 ${formatMan(row.src.idecoLumpSumInfo.grossAmount)}<br>税額 ${formatMan(row.src.idecoLumpSumInfo.taxAmount)}<br>特定リスクへ ${formatMan(row.src.idecoLumpSumInfo.proceeds)}`"></span></span>
               </template>
               <template v-if="row.src.idecoPensionInfo">
-                <span class="ideco-pension-badge" tabindex="0" aria-label="iDeCo年金">◆<span class="rebalance-tip" v-html="`iDeCo 年金受取<br>受取総額 ${formatMan(row.src.idecoPensionInfo.grossAmount)}<br>税額 ${formatMan(row.src.idecoPensionInfo.taxAmount)}<br>税引後 ${formatMan(row.src.idecoPensionInfo.proceeds)}`"></span></span>
+                <span class="event-badge" data-kind="ideco-pension" tabindex="0" aria-label="iDeCo年金">◆<span class="event-tip" v-html="`iDeCo 年金受取<br>受取総額 ${formatMan(row.src.idecoPensionInfo.grossAmount)}<br>税額 ${formatMan(row.src.idecoPensionInfo.taxAmount)}<br>税引後 ${formatMan(row.src.idecoPensionInfo.proceeds)}`"></span></span>
               </template>
             </td>
           </tr>
@@ -233,3 +238,180 @@ const yearGroups = computed<YearGroup[]>(() => {
     </details>
   </template>
 </template>
+
+<style scoped>
+.monthly-year {
+  border-top: 1px dashed var(--border);
+  padding: 6px 0;
+}
+
+.monthly-year > summary {
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 0;
+  color: var(--text);
+}
+
+.year-summary {
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+.year-summary.year-rate[data-rate-band="pos-strong"] {
+  color: var(--success);
+  font-weight: 600;
+}
+.year-summary.year-rate[data-rate-band="pos"] {
+  color: var(--success);
+}
+.year-summary.year-rate[data-rate-band="neg"] {
+  color: var(--danger);
+}
+.year-summary.year-rate[data-rate-band="neg-strong"] {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.monthly-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.monthly-table th,
+.monthly-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 4px 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.monthly-table th:first-child,
+.monthly-table td:first-child {
+  text-align: left;
+}
+
+.monthly-table th {
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+}
+
+.monthly-table td.neg {
+  color: var(--danger);
+}
+
+.monthly-table td.monthly-rate {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.monthly-table td[data-rate-band="pos-strong"] {
+  background: var(--rate-pos-strong-bg);
+}
+.monthly-table td[data-rate-band="pos"] {
+  background: var(--rate-pos-bg);
+}
+.monthly-table td[data-rate-band="neg"] {
+  background: var(--rate-neg-bg);
+  color: var(--danger);
+}
+.monthly-table td[data-rate-band="neg-strong"] {
+  background: var(--rate-neg-strong-bg);
+  color: var(--danger);
+}
+
+.monthly-table .cell-sub {
+  display: block;
+  font-size: 0.85em;
+  color: var(--muted);
+  line-height: 1.1;
+  margin-top: 1px;
+}
+
+.monthly-table th.group-header {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border-bottom: none;
+  padding-bottom: 2px;
+}
+
+.monthly-table th.group-risk {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+
+.monthly-table th.group-defense {
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  color: var(--warn);
+}
+
+.monthly-table th.group-cashflow {
+  background: color-mix(in srgb, var(--muted) 8%, transparent);
+  color: var(--muted);
+}
+
+.event-badge {
+  position: relative;
+  display: inline-block;
+  cursor: help;
+  font-weight: 700;
+  user-select: none;
+  margin-right: 2px;
+}
+
+.event-badge[data-kind="transfer"] {
+  color: #16a34a;
+}
+
+.event-badge[data-kind="rebalance"][data-direction="risk-to-defense"] {
+  color: var(--accent);
+}
+
+.event-badge[data-kind="rebalance"][data-direction="defense-to-risk"] {
+  color: var(--warn);
+}
+
+.event-badge[data-kind="ideco-lump"] {
+  color: #9333ea;
+}
+
+.event-badge[data-kind="ideco-pension"] {
+  color: #db2777;
+}
+
+.event-badge .event-tip {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: var(--text);
+  color: var(--panel);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border-radius: 6px;
+  width: max-content;
+  max-width: 240px;
+  white-space: normal;
+  text-align: left;
+  z-index: 10;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.event-badge:hover .event-tip,
+.event-badge:focus .event-tip {
+  visibility: visible;
+  opacity: 1;
+}
+</style>

@@ -37,3 +37,23 @@ const mcLabels: Array<[PercentileKey, string]> = [
     </div>
   </div>
 </template>
+
+<style scoped>
+.monthly-details {
+  margin-top: 8px;
+}
+
+.monthly-section {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--panel);
+}
+
+.monthly-section > summary {
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+</style>

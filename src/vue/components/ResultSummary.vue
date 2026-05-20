@@ -133,3 +133,108 @@ const metrics = computed(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.summary {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 700px) {
+  .summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+.score-card {
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1px solid var(--border);
+}
+
+.score-value {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.score-label {
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.score-desc {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.score-excellent {
+  background: rgba(22, 163, 74, 0.12);
+  border-color: rgba(22, 163, 74, 0.3);
+  color: var(--success);
+}
+
+.score-safe {
+  background: rgba(22, 163, 74, 0.08);
+  border-color: rgba(22, 163, 74, 0.25);
+  color: var(--success);
+}
+
+.score-caution {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--warn);
+}
+
+.score-warn {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: var(--warn);
+}
+
+.score-danger {
+  background: rgba(220, 38, 38, 0.12);
+  border-color: rgba(220, 38, 38, 0.3);
+  color: var(--danger);
+}
+
+.score-card :deep(.help-icon) {
+  background: rgba(255, 255, 255, 0.4);
+  color: inherit;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.metric-label {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.metric-value {
+  font-size: 16px;
+  font-weight: 600;
+}
+</style>

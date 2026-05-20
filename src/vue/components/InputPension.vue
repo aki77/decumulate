@@ -102,3 +102,103 @@ const periodUnit = computed(() => (state.value.currentAge != null ? "歳" : "年
     </div>
   </div>
 </template>
+
+<style scoped>
+.other-incomes-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.other-incomes-header label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.other-incomes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.other-incomes-list:empty {
+  display: none;
+}
+
+.other-income-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.other-income-row .oi-label {
+  width: 100%;
+}
+
+.other-income-row .oi-controls,
+.other-income-row .oi-period-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.other-income-row .oi-amount {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.other-income-row .oi-mode {
+  flex: 0 0 auto;
+}
+
+.other-income-row .oi-start {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.other-income-row .oi-period-sep {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.other-income-row .oi-end {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.other-income-row .oi-remove {
+  flex: 0 0 auto;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.other-income-row .oi-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.other-income-row input[type="number"],
+.other-income-row input[type="text"],
+.other-income-row select {
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  min-width: 0;
+}
+</style>

@@ -109,3 +109,81 @@ function preventNumberScroll(e: WheelEvent) {
     </footer>
   </div>
 </template>
+
+<style scoped>
+.page-header {
+  padding: 24px 24px 8px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin: 0;
+  font-size: 14px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 380px) 1fr;
+  gap: 20px;
+  padding: 20px 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.panel h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.form-actions {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.reset-button {
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.reset-button:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.page-footer {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 16px 24px 32px;
+}
+</style>

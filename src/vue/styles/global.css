@@ -1,0 +1,53 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f7f8fa;
+  --panel: #ffffff;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #2563eb;
+  --accent-soft: #dbeafe;
+  --success: #16a34a;
+  --warn: #f59e0b;
+  --danger: #dc2626;
+  --rate-pos-strong-bg: rgba(22, 163, 74, 0.28);
+  --rate-pos-bg: rgba(22, 163, 74, 0.12);
+  --rate-flat-bg: transparent;
+  --rate-neg-bg: rgba(220, 38, 38, 0.12);
+  --rate-neg-strong-bg: rgba(220, 38, 38, 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --text: #e5e7eb;
+    --muted: #94a3b8;
+    --border: #334155;
+    --accent: #60a5fa;
+    --accent-soft: #1e3a8a;
+    --rate-pos-strong-bg: rgba(34, 197, 94, 0.35);
+    --rate-pos-bg: rgba(34, 197, 94, 0.18);
+    --rate-neg-bg: rgba(239, 68, 68, 0.18);
+    --rate-neg-strong-bg: rgba(239, 68, 68, 0.35);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI",
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.55;
+}
