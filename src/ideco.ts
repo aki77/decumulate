@@ -56,16 +56,32 @@ export function lumpSumTax(grossAmount: number, serviceYears: number): number {
   return taxable * TAX_RATE;
 }
 
-// 公的年金等控除の最低額（円/年）
-// 65歳未満: 60万、65歳以上: 110万（他所得は無視する簡易計算）
-export function pensionDeductionAnnual(receiveAge: number): number {
-  return receiveAge >= 65 ? 1_100_000 : 600_000;
+// 公的年金等控除額（円/年）。2025年（令和7年）税制改正後の速算表ベース、
+// 公的年金等以外の合計所得金額が1,000万円以下の前提。
+// 公的年金 + iDeCo 年金 + 企業年金 などの合算収入額に対して 1 つの控除枠を適用する。
+export function pensionDeductionAnnual(totalAnnualGross: number, receiveAge: number): number {
+  const is65 = receiveAge >= 65;
+  const minDeduction = is65 ? 1_100_000 : 600_000;
+  const minThreshold = is65 ? 3_300_000 : 1_300_000;
+  if (totalAnnualGross < minThreshold) return minDeduction;
+  if (totalAnnualGross < 4_100_000) return totalAnnualGross * 0.25 + 275_000;
+  if (totalAnnualGross < 7_700_000) return totalAnnualGross * 0.15 + 685_000;
+  if (totalAnnualGross < 10_000_000) return totalAnnualGross * 0.05 + 1_455_000;
+  return 1_955_000;
 }
 
-// 年金受取年額にかかる税（簡易）。年額から控除を引いた残りに TAX_RATE を適用。
-export function pensionTax(annualGross: number, receiveAge: number): number {
-  const deduction = pensionDeductionAnnual(receiveAge);
-  const taxable = Math.max(0, annualGross - deduction);
+// iDeCo 年金分の課税額（簡易）。公的年金等控除は公的年金と合算で消費するため、
+// otherPensionAnnual（同年の公的年金受給額）を渡して残り控除枠だけを iDeCo 側に当てる。
+export function pensionTax(
+  idecoAnnualGross: number,
+  receiveAge: number,
+  otherPensionAnnual: number = 0,
+): number {
+  const totalGross = Math.max(0, otherPensionAnnual) + Math.max(0, idecoAnnualGross);
+  const totalDeduction = pensionDeductionAnnual(totalGross, receiveAge);
+  const otherDeductionUsed = Math.min(Math.max(0, otherPensionAnnual), totalDeduction);
+  const remainingDeduction = Math.max(0, totalDeduction - otherDeductionUsed);
+  const taxable = Math.max(0, idecoAnnualGross - remainingDeduction);
   return taxable * TAX_RATE;
 }
 
@@ -92,6 +108,7 @@ export function initIdecoState(params: IdecoParams): IdecoState {
 }
 
 // 月次ステップ: 運用 → 拠出 → 受取（受取開始月のみ一時金、毎月の年金）
+// otherPensionAnnual: 同年に受給する公的年金の年額（公的年金等控除枠の消費量）
 export function stepIdeco(
   state: IdecoState,
   params: IdecoParams,
@@ -100,6 +117,7 @@ export function stepIdeco(
   receiveStartYearOffset: number,
   receiveAge: number,
   monthlyRate: number,
+  otherPensionAnnual: number = 0,
 ): IdecoStepResult {
   const {
     idecoMonthlyContribution,
@@ -145,7 +163,7 @@ export function stepIdeco(
     if (monthIndex >= 0 && monthIndex < pensionTotalMonths) {
       const remainMonths = pensionTotalMonths - monthIndex;
       const gross = remainMonths > 0 ? total / remainMonths : total;
-      const monthlyTax = pensionTax(gross * 12, receiveAge) / 12;
+      const monthlyTax = pensionTax(gross * 12, receiveAge, otherPensionAnnual) / 12;
       [total, principal] = withdrawFromBucket(total, principal, gross, 0);
       pension = { grossAmount: gross, taxAmount: monthlyTax, proceeds: Math.max(0, gross - monthlyTax) };
     }
@@ -157,9 +175,11 @@ export function stepIdeco(
 // MC 用の実効税率を事前計算する。
 // 受取総額（拠出累計+運用益見込み）の代わりに、初期残高+将来拠出累計を粗く使う。
 // 厳密性は犠牲にしているが、CLAUDE.md の方針通り MC では課税を簡易化する。
+// otherPensionAnnual: 同時受給する公的年金の年額。公的年金等控除を合算で計算するため必要。
 export function idecoEffectiveTaxRateForMC(
   params: IdecoParams,
   receiveAge: number,
+  otherPensionAnnual: number = 0,
 ): { lumpSumRate: number; pensionAnnualGrossEstimate: number; pensionRate: number } {
   const contributions = params.idecoMonthlyContribution * 12 * params.idecoContributionYears;
   const estimatedTotal = Math.max(0, params.initialIdeco) + contributions;
@@ -170,7 +190,7 @@ export function idecoEffectiveTaxRateForMC(
   const pensionTotal = estimatedTotal - lumpSumGross;
   const pensionAnnualGross =
     params.idecoPensionYears > 0 ? pensionTotal / params.idecoPensionYears : 0;
-  const ptax = pensionTax(pensionAnnualGross, receiveAge);
+  const ptax = pensionTax(pensionAnnualGross, receiveAge, otherPensionAnnual);
   const pensionRate = pensionAnnualGross > 0 ? ptax / pensionAnnualGross : 0;
 
   return { lumpSumRate, pensionAnnualGrossEstimate: pensionAnnualGross, pensionRate };

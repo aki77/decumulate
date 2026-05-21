@@ -1,7 +1,7 @@
 // モンテカルロ・シミュレーション（GBM、5000パス）
 // 実質値（インフレ控除後）で計算。再現性のため Mulberry32 + Box-Muller を使用。
 // 口座構造: NISA(非課税) / 特定リスク(課税) / 防衛(課税) の3バケット + iDeCo（独立）
-import { adjustedMonthlyPension } from "./pension.ts";
+import { adjustedMonthlyPension, grossMonthlyPension } from "./pension.ts";
 import {
   TAX_RATE,
   NISA_ANNUAL_LIMIT,
@@ -160,6 +160,8 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const skipRebalanceWhenDrawdown = !!skipRebalanceOnDrawdown;
 
   const monthlyPension = basePension > 0 ? adjustedMonthlyPension(basePension, pensionStartAge) : 0;
+  // iDeCo 年金分の課税で公的年金等控除を合算消費するため、控除前年額（gross）を保持する
+  const grossAnnualPension = basePension > 0 ? grossMonthlyPension(basePension, pensionStartAge) * 12 : 0;
   const pensionStartYearOffset =
     basePension > 0 ? Math.max(0, pensionStartAge - currentAge) : null;
 
@@ -206,8 +208,10 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const idecoReceiveAge = idecoEnabled
     ? computeIdecoReceiveAge(ideco.idecoReceiveStartAge, currentAge)
     : 65;
+  // 公的年金等控除は合算枠（iDeCo 年金 + 公的年金）で消費するため、grossAnnualPension を渡す。
+  // 厳密には iDeCo 年金受給期間中に公的年金が始まる/まだ始まっていない月があるが、MC は一律レート前提なのでフル消費として扱う。
   const idecoEffective = idecoEnabled
-    ? idecoEffectiveTaxRateForMC(ideco, idecoReceiveAge)
+    ? idecoEffectiveTaxRateForMC(ideco, idecoReceiveAge, grossAnnualPension)
     : { lumpSumRate: 0, pensionAnnualGrossEstimate: 0, pensionRate: 0 };
   const idecoPensionTotalMonths = idecoEnabled ? Math.max(0, ideco.idecoPensionYears) * 12 : 0;
   const idecoLumpRatio = idecoEnabled

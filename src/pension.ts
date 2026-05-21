@@ -11,7 +11,11 @@ export function pensionMultiplier(startAge: number): number {
   return 1 + diffMonths * 0.007;
 }
 
+// 公的年金等控除の合算枠消費量として使うため、繰上げ/繰下げ反映後の「税・社保控除前」月額を返す。
+export function grossMonthlyPension(basePension: number, startAge: number): number {
+  return basePension * pensionMultiplier(startAge);
+}
+
 export function adjustedMonthlyPension(basePension: number, startAge: number): number {
-  const gross = basePension * pensionMultiplier(startAge);
-  return Math.round(gross * PENSION_NET_RATE);
+  return Math.round(grossMonthlyPension(basePension, startAge) * PENSION_NET_RATE);
 }

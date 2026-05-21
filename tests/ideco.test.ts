@@ -91,27 +91,56 @@ test("lumpSumTax - 控除超過部分の半分にTAX_RATE", () => {
 
 // --- pensionDeductionAnnual ---
 
-test("pensionDeductionAnnual - 64歳までは60万", () => {
-  assert.strictEqual(pensionDeductionAnnual(60), 600_000);
-  assert.strictEqual(pensionDeductionAnnual(64), 600_000);
+test("pensionDeductionAnnual - 64歳までは最低60万（合算 130万未満）", () => {
+  assert.strictEqual(pensionDeductionAnnual(500_000, 60), 600_000);
+  assert.strictEqual(pensionDeductionAnnual(1_299_999, 64), 600_000);
 });
 
-test("pensionDeductionAnnual - 65歳以上は110万", () => {
-  assert.strictEqual(pensionDeductionAnnual(65), 1_100_000);
-  assert.strictEqual(pensionDeductionAnnual(75), 1_100_000);
+test("pensionDeductionAnnual - 65歳以上は最低110万（合算 330万未満）", () => {
+  assert.strictEqual(pensionDeductionAnnual(1_000_000, 65), 1_100_000);
+  assert.strictEqual(pensionDeductionAnnual(3_299_999, 75), 1_100_000);
+});
+
+test("pensionDeductionAnnual - 速算表（65歳以上・330万〜410万 → gross×25% + 27.5万）", () => {
+  // 合算 400万 → 400万 × 0.25 + 27.5万 = 127.5万
+  assert.strictEqual(pensionDeductionAnnual(4_000_000, 65), 4_000_000 * 0.25 + 275_000);
 });
 
 // --- pensionTax ---
 
-test("pensionTax - 控除内なら税ゼロ", () => {
-  assert.strictEqual(pensionTax(500_000, 60), 0);
-  assert.strictEqual(pensionTax(1_000_000, 65), 0);
+test("pensionTax - 公的年金ゼロ・iDeCo 単独で控除内なら税ゼロ", () => {
+  assert.strictEqual(pensionTax(500_000, 60, 0), 0);
+  assert.strictEqual(pensionTax(1_000_000, 65, 0), 0);
 });
 
-test("pensionTax - 控除超過部分にTAX_RATE", () => {
-  // 65歳・年200万なら超過90万にTAX_RATE
-  const tax = pensionTax(2_000_000, 65);
+test("pensionTax - 公的年金ゼロ・iDeCo 単独で控除超過にTAX_RATE", () => {
+  // 65歳・年200万 → 合算控除は110万、超過90万にTAX_RATE
+  const tax = pensionTax(2_000_000, 65, 0);
   const expected = (2_000_000 - 1_100_000) * TAX_RATE;
+  assert.ok(Math.abs(tax - expected) < 0.001);
+});
+
+test("pensionTax - 公的年金が控除を全消費していると iDeCo 年金は全額課税", () => {
+  // 65歳・公的年金 200万（控除110万を既に消費＋90万も超過分として消費）+ iDeCo 100万
+  // 合算 300万、合算控除 110万、公的年金が消費する分 110万、残り控除 0 → iDeCo 100万全額課税
+  const tax = pensionTax(1_000_000, 65, 2_000_000);
+  const expected = 1_000_000 * TAX_RATE;
+  assert.ok(Math.abs(tax - expected) < 0.001);
+});
+
+test("pensionTax - 公的年金が控除を一部しか消費しないと iDeCo に残り控除が回る", () => {
+  // 65歳・公的年金 50万 + iDeCo 100万 → 合算 150万、合算控除 110万、
+  // 公的年金が消費 50万、残り控除 60万 → iDeCo 課税 = 100万 - 60万 = 40万
+  const tax = pensionTax(1_000_000, 65, 500_000);
+  const expected = (1_000_000 - 600_000) * TAX_RATE;
+  assert.ok(Math.abs(tax - expected) < 0.001);
+});
+
+test("pensionTax - 合算が速算表帯に入る場合（65歳・公的年金200万+iDeCo100万）", () => {
+  // 合算 300万 < 330万なので最低控除 110万、公的年金が110万消費 → 残り控除0
+  // → iDeCo 100万全額課税
+  const tax = pensionTax(1_000_000, 65, 2_000_000);
+  const expected = 1_000_000 * TAX_RATE;
   assert.ok(Math.abs(tax - expected) < 0.001);
 });
 

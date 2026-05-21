@@ -10,7 +10,7 @@ const state = defineModel<ParamsState>({ required: true });
   <div class="field-group">
     <h3>
       iDeCo（個人型確定拠出年金）
-      <HelpIcon text="運用中非課税、60歳以降に受取（一時金/年金/併用）。本シミュレータは資産フローのみを扱い、所得控除メリットや拠出上限チェックは行わない。受取時は退職所得控除・公的年金等控除を簡易適用。利回りはリスクサイドと同じ。" />
+      <HelpIcon text="運用中非課税、60歳以降に受取（一時金/年金/併用）。本シミュレータは資産フローのみを扱い、所得控除メリットや拠出上限チェックは行わない。一時金課税は拠出年数で退職所得控除を適用するが、退職金との受給間隔ルール（2026年改正で 5年→10年、退職金先行は 19年）は厳密にはモデル化しないため、退職金がある会社員の税額は過小評価になり得る。年金課税は公的年金との合算で公的年金等控除を計算する。利回りはリスクサイドと同じ。" />
     </h3>
     <div class="field checkbox-field">
       <input id="idecoEnabled" v-model="state.idecoEnabled" type="checkbox" />

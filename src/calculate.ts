@@ -1,7 +1,7 @@
 // 決定論的な複利 + 取り崩しシミュレーション
 // 月次ループで運用 -> 積立 -> 取り崩し -> 損益按分課税 の順に処理する
 // 口座構造: NISA(非課税) / 特定リスク(課税) / 防衛(課税) の3バケット + iDeCo（独立バケット）
-import { adjustedMonthlyPension } from "./pension.ts";
+import { adjustedMonthlyPension, grossMonthlyPension } from "./pension.ts";
 import { sumOtherIncomeAt, type OtherIncomeMonthly } from "./other-income.ts";
 import {
   initIdecoState,
@@ -466,6 +466,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
   const monthlyRateDefense = Math.pow(1 + realAnnualRateDefense, 1 / 12) - 1;
 
   const monthlyPension = basePension > 0 ? adjustedMonthlyPension(basePension, pensionStartAge) : 0;
+  // 公的年金等控除の合算枠を計算するため、控除前年額（gross）を保持する
+  const grossAnnualPension = basePension > 0 ? grossMonthlyPension(basePension, pensionStartAge) * 12 : 0;
   const pensionStartYearOffset =
     basePension > 0 ? Math.max(0, pensionStartAge - currentAge) : null;
 
@@ -551,6 +553,12 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     const floorThisYear = limitsThisYear.floor;
     const ceilingThisYear = limitsThisYear.ceiling;
 
+    // iDeCo 年金課税で公的年金等控除を合算消費するため、この年の公的年金 gross 年額を解決。
+    const otherPensionAnnualForIdeco =
+      pensionStartYearOffset != null && year >= pensionStartYearOffset && grossAnnualPension > 0
+        ? grossAnnualPension
+        : 0;
+
       // 月次積立の年間総額を年枠から先取りした残りを振替に充当する
     let yearStartTransferInfo: NisaTransferInfo | null = null;
     if (nisaTransferEnabled) {
@@ -606,6 +614,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
           idecoReceiveOffset,
           idecoReceiveAge,
           monthlyRateRisk,
+          otherPensionAnnualForIdeco,
         );
         idecoState = r.state;
         gainIdeco = r.gain;
