@@ -30,7 +30,6 @@ function buildChart(): void {
   const labels = projections.map((p) => (p.age != null ? `${p.age}歳` : `${p.year}年`));
   const principal = projections.map((p) => toMan(p.principal));
   const interest = projections.map((p) => toMan(p.interest));
-  const tax = projections.map((p) => toMan(p.tax));
 
   const annotations: Record<string, unknown> = {};
   if (params.contributionYears > 0 && params.contributionYears <= projections.length - 1) {
@@ -77,17 +76,6 @@ function buildChart(): void {
           data: interest,
           backgroundColor: "rgba(34, 197, 94, 0.5)",
           borderColor: "rgba(34, 197, 94, 1)",
-          borderWidth: 0,
-          fill: true,
-          stack: "assets",
-          pointRadius: 0,
-          tension: 0.15,
-        },
-        {
-          label: "税金（含み益分）",
-          data: tax,
-          backgroundColor: "rgba(244, 114, 182, 0.5)",
-          borderColor: "rgba(244, 114, 182, 1)",
           borderWidth: 0,
           fill: true,
           stack: "assets",

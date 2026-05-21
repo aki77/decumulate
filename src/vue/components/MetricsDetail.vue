@@ -13,7 +13,6 @@ const props = defineProps<{
 
 const HELP = {
   totalContrib: "初期投資額 + 月額積立 × 12 × 積立年数。自身が拠出した元本の合計。",
-  tax: "特定口座を想定した含み益への課税（20.315%）の累計概算。",
   mcP10: "最終資産分布の下位 10% タイル。下振れシナリオの目安。",
   mcP90: "最終資産分布の上位 10% タイル。上振れシナリオの目安。",
   finalNisa: "シミュレーション最終年のNISA口座残高（時価, 名目値）。NISAは非課税のため、取り崩しを最後に回すと有利。",
@@ -41,10 +40,6 @@ const metrics = useMetrics(() => props.yearly, () => props.params);
       <div class="metric">
         <div class="metric-label">積立元本合計<HelpIcon :text="HELP.totalContrib" /></div>
         <div class="metric-value">{{ formatMan(metrics.totalContrib) }}</div>
-      </div>
-      <div class="metric">
-        <div class="metric-label">想定税金<HelpIcon :text="HELP.tax" /></div>
-        <div class="metric-value">{{ formatMan(metrics.last.tax) }}</div>
       </div>
       <div class="metric">
         <div class="metric-label">最終 NISA 残高<HelpIcon :text="HELP.finalNisa" /></div>
