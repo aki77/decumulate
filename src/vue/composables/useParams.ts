@@ -1,8 +1,9 @@
-import { reactive, computed } from "vue";
+import { reactive, computed, ref } from "vue";
 import { refDebounced } from "@vueuse/core";
 import { normalizeOtherIncomes, type OtherIncomeEntry } from "../../other-income.ts";
 import type { WithdrawalLimitStep } from "../../calculate.ts";
 import type { MonteCarloParams } from "../../monte-carlo.ts";
+import { findSafeWithdrawalRate, type SwrSearchResult } from "../../swr.ts";
 
 export type WithdrawalMode = "amount" | "rate" | "rate-risk";
 
@@ -283,6 +284,24 @@ export function useParams() {
     list.splice(idx, 1);
   }
 
+  const isComputingSwr = ref(false);
+
+  async function runSwrSearch(): Promise<SwrSearchResult> {
+    if (isComputingSwr.value) throw new Error("SWR search already running");
+    isComputingSwr.value = true;
+    // 「計算中…」描画にフレームを譲ってから ~900ms の同期 MC ループへ
+    await new Promise<void>((r) => setTimeout(r, 0));
+    try {
+      const result = findSafeWithdrawalRate(mcParams.value);
+      if (result.rate !== state.withdrawalRate) {
+        state.withdrawalRate = result.rate;
+      }
+      return result;
+    } finally {
+      isComputingSwr.value = false;
+    }
+  }
+
   return {
     state,
     debouncedMcParams,
@@ -292,6 +311,8 @@ export function useParams() {
     removeOtherIncome,
     addLimitStep,
     removeLimitStep,
+    isComputingSwr,
+    runSwrSearch,
     MAN,
   };
 }

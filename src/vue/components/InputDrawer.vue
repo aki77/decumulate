@@ -11,7 +11,7 @@ import InputWithdrawal from "./InputWithdrawal.vue";
 import InputIdeco from "./InputIdeco.vue";
 import InputPension from "./InputPension.vue";
 
-const props = defineProps<{ open: boolean }>();
+const props = defineProps<{ open: boolean; isComputingSwr: boolean }>();
 const emit = defineEmits<{
   close: [];
   applyProductPreset: [key: string];
@@ -20,6 +20,7 @@ const emit = defineEmits<{
   removeOtherIncome: [id: string];
   addLimitStep: [];
   removeLimitStep: [idx: number];
+  requestSwr: [];
   reset: [];
   export: [];
   import: [data: string];
@@ -78,8 +79,10 @@ watch(
             <InputPeriod v-model="state" />
             <InputWithdrawal
               v-model="state"
+              :is-computing-swr="props.isComputingSwr"
               @add-limit-step="emit('addLimitStep')"
               @remove-limit-step="emit('removeLimitStep', $event)"
+              @request-swr="emit('requestSwr')"
             />
             <InputIdeco v-model="state" />
             <InputPension

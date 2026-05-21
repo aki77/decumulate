@@ -6,9 +6,14 @@ import type { ParamsState, WithdrawalMode } from "../composables/useParams.ts";
 
 const state = defineModel<ParamsState>({ required: true });
 
+defineProps<{
+  isComputingSwr: boolean;
+}>();
+
 defineEmits<{
   addLimitStep: [];
   removeLimitStep: [idx: number];
+  requestSwr: [];
 }>();
 
 const isRateMode = computed(
@@ -38,9 +43,19 @@ const isRateMode = computed(
       <div class="field">
         <label for="withdrawalRate">
           年間引出率（%）
-          <HelpIcon text="年あたりの引出割合。Trinity Study モードでは取り崩し開始時の総資産に対する率（4%が目安）。リスク資産モードでは毎年初時点のリスク資産に対する率。" />
+          <HelpIcon text="年あたりの引出割合。Trinity Study モードでは取り崩し開始時の総資産に対する率（4%が目安）。リスク資産モードでは毎年初時点のリスク資産に対する率。「自動算出」ボタンで、成功率95%（取り崩し終了時に資産が枯渇しない確率）を満たす最大の引出率を二分探索で求められます。" />
         </label>
-        <InputNumber id="withdrawalRate" v-model="state.withdrawalRate" min="0" max="20" step="0.1" />
+        <div class="rate-with-button">
+          <InputNumber id="withdrawalRate" v-model="state.withdrawalRate" min="0" max="20" step="0.1" />
+          <button
+            type="button"
+            class="auto-calc-btn"
+            :disabled="isComputingSwr"
+            @click="$emit('requestSwr')"
+          >
+            {{ isComputingSwr ? "計算中…" : "自動算出" }}
+          </button>
+        </div>
       </div>
       <div class="field field--full">
         <label>
@@ -151,5 +166,36 @@ const isRateMode = computed(
 .limit-add:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.rate-with-button {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.rate-with-button :deep(input) {
+  flex: 1;
+  min-width: 0;
+}
+
+.auto-calc-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 0 12px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.auto-calc-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.auto-calc-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 </style>

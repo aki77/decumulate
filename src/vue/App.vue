@@ -13,7 +13,7 @@ import CompoundChart from "./components/CompoundChart.vue";
 import MonteCarloChart from "./components/MonteCarloChart.vue";
 import MonthlyDetails from "./components/MonthlyDetails.vue";
 
-const { state, debouncedMcParams, applyProductPreset, applyDefensePreset, addOtherIncome, removeOtherIncome, addLimitStep, removeLimitStep } = useParams();
+const { state, debouncedMcParams, applyProductPreset, applyDefensePreset, addOtherIncome, removeOtherIncome, addLimitStep, removeLimitStep, isComputingSwr, runSwrSearch } = useParams();
 const storage = useStorage(state);
 const { result } = useSimulator(debouncedMcParams);
 
@@ -104,6 +104,7 @@ function handleExport() {
 
     <InputDrawer
       :open="drawerOpen"
+      :is-computing-swr="isComputingSwr"
       v-model="state"
       @close="closeDrawer"
       @apply-product-preset="applyProductPreset"
@@ -112,6 +113,7 @@ function handleExport() {
       @remove-other-income="removeOtherIncome"
       @add-limit-step="addLimitStep"
       @remove-limit-step="removeLimitStep"
+      @request-swr="runSwrSearch"
       @reset="handleReset"
       @export="handleExport"
       @import="storage.importData"
