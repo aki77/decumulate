@@ -1,10 +1,13 @@
 import { watchDebounced } from "@vueuse/core";
 import type { OtherIncomeEntry } from "../../other-income.ts";
-import type { ParamsState } from "./useParams.ts";
+import type { ParamsState, WithdrawalLimitStepInput } from "./useParams.ts";
 
-const STORAGE_KEY = "decumulate:inputs:v3";
+const STORAGE_KEY = "decumulate:inputs:v4";
 
-type StoredState = Omit<ParamsState, "otherIncomes"> & { otherIncomes: OtherIncomeEntry[] };
+type StoredState = Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps"> & {
+  otherIncomes: OtherIncomeEntry[];
+  withdrawalLimitSteps: WithdrawalLimitStepInput[];
+};
 
 function isOtherIncomeEntry(v: unknown): v is OtherIncomeEntry {
   if (!v || typeof v !== "object") return false;
@@ -19,6 +22,16 @@ function isOtherIncomeEntry(v: unknown): v is OtherIncomeEntry {
   );
 }
 
+function isWithdrawalLimitStep(v: unknown): v is WithdrawalLimitStepInput {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return (
+    (o["untilAge"] === null || typeof o["untilAge"] === "number") &&
+    (o["floorMan"] === null || typeof o["floorMan"] === "number") &&
+    (o["ceilingMan"] === null || typeof o["ceilingMan"] === "number")
+  );
+}
+
 function loadFromStorage(): Partial<StoredState> | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -29,12 +42,13 @@ function loadFromStorage(): Partial<StoredState> | null {
     const result: Partial<StoredState> = {};
 
     const numFields = [
+      "currentAge",
       "initialNisaMan", "initialNisaGainMan", "initialTaxableRiskMan",
       "initialTaxableRiskGainMan", "initialDefenseMan", "initialDefenseGainMan",
       "nisaInitialLifetimeUsedMan", "monthlyContributionMan", "annualReturnRate",
       "expenseRatio", "inflationRate", "volatility", "contributionYears",
       "withdrawalStartYear", "withdrawalYears", "fixedMonthlyWithdrawalMan",
-      "withdrawalRate", "monthlyWithdrawalFloorMan", "monthlyWithdrawalCeilingMan",
+      "withdrawalRate",
       "basePensionMan", "pensionStartAge", "defenseAnnualReturnRate", "defenseVolatility",
       "targetDefenseRatioPercent",
       "drawdownThresholdPercent", "rebalanceThresholdPoint",
@@ -53,8 +67,6 @@ function loadFromStorage(): Partial<StoredState> | null {
       const v = data[key];
       if (typeof v === "number" && Number.isFinite(v)) {
         (result as Record<string, unknown>)[key] = v;
-      } else if (v === null && (key === "monthlyWithdrawalFloorMan" || key === "monthlyWithdrawalCeilingMan")) {
-        (result as Record<string, unknown>)[key] = null;
       }
     }
 
@@ -68,14 +80,18 @@ function loadFromStorage(): Partial<StoredState> | null {
       if (typeof v === "string") (result as Record<string, unknown>)[key] = v;
     }
 
-    const currentAgeRaw = data["currentAge"];
-    if (currentAgeRaw === null || typeof currentAgeRaw === "number") {
-      result.currentAge = currentAgeRaw ?? null;
-    }
-
     const rawOi = data["otherIncomes"];
     if (Array.isArray(rawOi)) {
       result.otherIncomes = rawOi.filter(isOtherIncomeEntry);
+    }
+
+    const rawSteps = data["withdrawalLimitSteps"];
+    if (Array.isArray(rawSteps)) {
+      const filtered = rawSteps.filter(isWithdrawalLimitStep);
+      // 終端行（untilAge=null）が無い壊れデータからは復元しない（デフォルトに任せる）
+      if (filtered.some((s) => s.untilAge === null)) {
+        result.withdrawalLimitSteps = filtered;
+      }
     }
 
     return result;

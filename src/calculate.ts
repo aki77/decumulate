@@ -42,14 +42,15 @@ export interface CalculateParams {
   withdrawalMode: "amount" | "rate" | "rate-risk";
   fixedMonthlyWithdrawal: number;
   withdrawalRate: number;
-  monthlyWithdrawalFloor: number | null;
-  monthlyWithdrawalCeiling: number | null;
+  // 年率モード時の月額下限/上限。年齢ステップ式。各行 untilAge までその floor/ceiling を採用、
+  // 末尾行は untilAge=null（以降ずっと）。値は円・実質値（呼び出し側で名目化）。
+  withdrawalLimitSchedule: WithdrawalLimitStep[];
   inflationAdjustedWithdrawal: boolean;
 
   // 年金・他収入
   basePension: number;
   pensionStartAge: number;
-  currentAge: number | null;
+  currentAge: number;
   otherIncomes: OtherIncomeMonthly[];
 
   // 防衛資産
@@ -70,7 +71,7 @@ export interface CalculateParams {
 
 export interface YearlyProjection {
   year: number;
-  age: number | null;
+  age: number;
   principal: number;
   interest: number;
   tax: number;
@@ -104,7 +105,7 @@ export interface NisaTransferInfo {
 export interface MonthlyProjection {
   year: number;
   month: number;
-  age: number | null;
+  age: number;
   nisaTotal: number;
   taxableRiskTotal: number;
   riskTotal: number;
@@ -137,6 +138,32 @@ export interface MonthlyProjection {
 export interface CompoundResult {
   yearly: YearlyProjection[];
   monthly: MonthlyProjection[];
+}
+
+// 年率モード時の月額下限/上限の年齢ステップ。
+// - untilAge=null は終端行（その年齢以降ずっと採用）。配列の末尾に 1 行だけ存在する。
+// - floor/ceiling=null はその区間で制限なしを意味する。
+// - 値の単位は円・実質値（現在の購買力基準）。決定論版では年初に *= (1+ri) で名目化する。
+export interface WithdrawalLimitStep {
+  untilAge: number | null;
+  floor: number | null;
+  ceiling: number | null;
+}
+
+// age に対応する floor/ceiling を取得。schedule は untilAge 昇順を想定するが、未ソートでも
+// 「age <= untilAge で最初に一致した行、無ければ末尾」で安全に解決する。
+export function findLimitForAge(
+  schedule: WithdrawalLimitStep[],
+  age: number,
+): { floor: number | null; ceiling: number | null } {
+  if (schedule.length === 0) return { floor: null, ceiling: null };
+  for (const step of schedule) {
+    if (step.untilAge !== null && age <= step.untilAge) {
+      return { floor: step.floor, ceiling: step.ceiling };
+    }
+  }
+  const last = schedule[schedule.length - 1]!;
+  return { floor: last.floor, ceiling: last.ceiling };
 }
 
 // 年率モード時の月額下限/上限クランプ。null は無効を意味する。
@@ -408,8 +435,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     withdrawalMode,
     fixedMonthlyWithdrawal,
     withdrawalRate,
-    monthlyWithdrawalFloor,
-    monthlyWithdrawalCeiling,
+    withdrawalLimitSchedule,
     inflationAdjustedWithdrawal,
     basePension,
     pensionStartAge,
@@ -441,7 +467,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
 
   const monthlyPension = basePension > 0 ? adjustedMonthlyPension(basePension, pensionStartAge) : 0;
   const pensionStartYearOffset =
-    basePension > 0 && currentAge != null ? Math.max(0, pensionStartAge - currentAge) : null;
+    basePension > 0 ? Math.max(0, pensionStartAge - currentAge) : null;
 
   let nisaTotal = initialNisa;
   let nisaPrincipal = Math.max(0, initialNisa - initialNisaGain);
@@ -468,13 +494,17 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
   let rateWithdrawalBasis: number | null = null;
   const isAnyRateMode = withdrawalMode === "rate" || withdrawalMode === "rate-risk";
   // 決定論版は名目値計算のため、年率モードの下限/上限を毎年初に *=(1+ri) して実質購買力を一定に保つ。
-  let currentMonthlyFloor: number | null = monthlyWithdrawalFloor;
-  let currentMonthlyCeiling: number | null = monthlyWithdrawalCeiling;
+  // schedule は実質値で受け取り、ローカルに名目コピーを保持して年初に名目化する。
+  const nominalLimitSchedule: WithdrawalLimitStep[] = withdrawalLimitSchedule.map((s) => ({
+    untilAge: s.untilAge,
+    floor: s.floor,
+    ceiling: s.ceiling,
+  }));
 
   const projections: YearlyProjection[] = [
     {
       year: 0,
-      age: currentAge != null ? currentAge : null,
+      age: currentAge,
       principal: Math.round(
         nisaPrincipal + taxableRiskPrincipal + defensePrincipal + idecoState.principal,
       ),
@@ -509,9 +539,17 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     let yearlyIdecoPension = 0;
 
     if (ri > 0) {
-      if (currentMonthlyFloor !== null) currentMonthlyFloor *= 1 + ri;
-      if (currentMonthlyCeiling !== null) currentMonthlyCeiling *= 1 + ri;
+      for (const step of nominalLimitSchedule) {
+        if (step.floor !== null) step.floor *= 1 + ri;
+        if (step.ceiling !== null) step.ceiling *= 1 + ri;
+      }
     }
+
+    // 年初にこの年の floor/ceiling を解決。月次ループ内では分割代入を作らずローカル変数で参照する。
+    const ageThisYear = currentAge + year;
+    const limitsThisYear = findLimitForAge(nominalLimitSchedule, ageThisYear);
+    const floorThisYear = limitsThisYear.floor;
+    const ceilingThisYear = limitsThisYear.ceiling;
 
       // 月次積立の年間総額を年枠から先取りした残りを振替に充当する
     let yearStartTransferInfo: NisaTransferInfo | null = null;
@@ -635,7 +673,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         }
 
         if (isAnyRateMode) {
-          baseWithdrawal = clampToBounds(baseWithdrawal, currentMonthlyFloor, currentMonthlyCeiling);
+          baseWithdrawal = clampToBounds(baseWithdrawal, floorThisYear, ceilingThisYear);
         }
 
         const pensionActive =
@@ -729,7 +767,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
       monthlyArr.push({
         year,
         month: m + 1,
-        age: currentAge != null ? currentAge + year : null,
+        age: currentAge + year,
         nisaTotal: Math.round(nisaTotal),
         taxableRiskTotal: Math.round(taxableRiskTotal),
         riskTotal: Math.round(nisaTotal + taxableRiskTotal + idecoState.total),
@@ -781,7 +819,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     const afterTaxTotal = Math.max(endTotal - tax, 0);
     projections.push({
       year,
-      age: currentAge != null ? currentAge + year : null,
+      age: currentAge + year,
       principal: Math.round(endPrincipal),
       interest: totalInterest > 0 ? Math.round(totalInterest - tax) : 0,
       tax,

@@ -6,8 +6,8 @@ import {
   TAX_RATE,
   NISA_ANNUAL_LIMIT,
   NISA_LIFETIME_LIMIT,
-  clampToBounds,
   executeNisaTransfer,
+  findLimitForAge,
   needsRebalance,
   type CalculateParams,
   type MonthlyProjection,
@@ -34,7 +34,7 @@ export interface MonteCarloParams extends CalculateParams {
 
 export interface MonteCarloYearly {
   year: number;
-  age: number | null;
+  age: number;
   p10: number;
   p25: number;
   p50: number;
@@ -114,8 +114,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     withdrawalMode,
     fixedMonthlyWithdrawal,
     withdrawalRate,
-    monthlyWithdrawalFloor,
-    monthlyWithdrawalCeiling,
+    withdrawalLimitSchedule,
     inflationAdjustedWithdrawal,
     basePension,
     pensionStartAge,
@@ -162,15 +161,23 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
 
   const monthlyPension = basePension > 0 ? adjustedMonthlyPension(basePension, pensionStartAge) : 0;
   const pensionStartYearOffset =
-    basePension > 0 && currentAge != null ? Math.max(0, pensionStartAge - currentAge) : null;
+    basePension > 0 ? Math.max(0, pensionStartAge - currentAge) : null;
 
   const isRateMode = withdrawalMode === "rate";
   const isRateRiskMode = withdrawalMode === "rate-risk";
   const isAnyRateMode = isRateMode || isRateRiskMode;
 
   // MC は内部が実質値計算。入力値（今日の購買力）をそのまま全期間の実質閾値に使う（決定論版とは違いインフレ進行させない）。
-  const floorReal: number | null = monthlyWithdrawalFloor;
-  const ceilingReal: number | null = monthlyWithdrawalCeiling;
+  // ホットループ内の分岐を避けるため、年インデックス → floor/ceiling の Float64Array を事前展開する。
+  // null は ±Infinity にエンコードして clampToBounds の条件式（v < -Infinity / v > +Infinity）を常に false 評価にする。
+  const floorByYear = new Float64Array(totalYears + 1);
+  const ceilingByYear = new Float64Array(totalYears + 1);
+  for (let y = 0; y <= totalYears; y++) {
+    const ageThisYear = currentAge + y;
+    const { floor, ceiling } = findLimitForAge(withdrawalLimitSchedule, ageThisYear);
+    floorByYear[y] = floor !== null ? floor : Number.NEGATIVE_INFINITY;
+    ceilingByYear[y] = ceiling !== null ? ceiling : Number.POSITIVE_INFINITY;
+  }
 
   // 名目固定の引出額は実質値で目減りするのでデフレ調整
   const preWithdrawalDeflation =
@@ -304,7 +311,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     const row: MonthlyProjection = {
       year: raw.year,
       month: raw.month,
-      age: currentAge != null ? currentAge + raw.year : null,
+      age: currentAge + raw.year,
       nisaTotal: Math.round(raw.nisaTotal),
       taxableRiskTotal: Math.round(raw.taxableRiskTotal),
       riskTotal: Math.round(raw.nisaTotal + raw.taxableRiskTotal + raw.idecoTotal),
@@ -348,7 +355,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const yearly: MonteCarloYearly[] = [
     {
       year: 0,
-      age: currentAge != null ? currentAge : null,
+      age: currentAge,
       p10: initialTotal,
       p25: initialTotal,
       p50: initialTotal,
@@ -560,7 +567,10 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
           }
 
           if (isAnyRateMode) {
-            baseWithdrawal = clampToBounds(baseWithdrawal, floorReal, ceilingReal);
+            const floorThisYear = floorByYear[year]!;
+            const ceilingThisYear = ceilingByYear[year]!;
+            if (baseWithdrawal < floorThisYear) baseWithdrawal = floorThisYear;
+            if (baseWithdrawal > ceilingThisYear) baseWithdrawal = ceilingThisYear;
           }
 
           const monOtherIncomeWithIdeco = monthOtherIncomeForYear + idecoPensionProceedsForMonth;
@@ -806,7 +816,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     const q = (p: number) => totalPaths[Math.min(N - 1, Math.floor(N * p))]!;
     yearly.push({
       year,
-      age: currentAge != null ? currentAge + year : null,
+      age: currentAge + year,
       p10: q(0.1),
       p25: q(0.25),
       p50: q(0.5),

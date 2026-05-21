@@ -7,6 +7,8 @@ const props = defineProps<{
   max?: number | string
   step?: number | string
   placeholder?: string
+  required?: boolean
+  disabled?: boolean
 }>()
 
 function onWheel(e: WheelEvent) {
@@ -28,6 +30,8 @@ function onInput(e: Event) {
     :max="props.max"
     :step="props.step"
     :placeholder="props.placeholder"
+    :required="props.required"
+    :disabled="props.disabled"
     type="number"
     :value="model ?? ''"
     @wheel="onWheel"

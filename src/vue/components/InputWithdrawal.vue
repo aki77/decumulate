@@ -6,6 +6,11 @@ import type { ParamsState, WithdrawalMode } from "../composables/useParams.ts";
 
 const state = defineModel<ParamsState>({ required: true });
 
+defineEmits<{
+  addLimitStep: [];
+  removeLimitStep: [idx: number];
+}>();
+
 const isRateMode = computed(
   () => state.value.withdrawalMode === "rate" || state.value.withdrawalMode === "rate-risk",
 );
@@ -37,19 +42,45 @@ const isRateMode = computed(
         </label>
         <InputNumber id="withdrawalRate" v-model="state.withdrawalRate" min="0" max="20" step="0.1" />
       </div>
-      <div class="field">
-        <label for="monthlyWithdrawalFloor">
-          月額下限（万円, 任意）
-          <HelpIcon text="年率モードで計算した月額がこの値を下回ったら、この値まで引き上げます。空欄なら無制限。値は「現在の購買力」基準で、シミュレーション内では毎年インフレ率分だけ自動で増えるため実質価値が保たれます。資産がほぼ枯渇したときは下限を維持できず資産残全額を引き出します。" />
+      <div class="field field--full">
+        <label>
+          月額下限・上限（年齢ステップ式）
+          <HelpIcon text="年齢に応じて月額下限・上限を段階的に変えられます。各行の「〜歳まで」までその区間の下限・上限を適用、最後の行は「以降ずっと」。値は「現在の購買力（万円）」で、シミュレーション内では自動でインフレ名目化されます。空欄は無制限。下限>上限のときは上限が優先されます。" />
         </label>
-        <InputNumber id="monthlyWithdrawalFloor" v-model="state.monthlyWithdrawalFloorMan" min="0" step="1" placeholder="例: 20" />
-      </div>
-      <div class="field">
-        <label for="monthlyWithdrawalCeiling">
-          月額上限（万円, 任意）
-          <HelpIcon text="年率モードで計算した月額がこの値を上回ったら、この値で抑えます。空欄なら無制限。値は「現在の購買力」基準で、毎年インフレ率分だけ自動で増えます。下限と上限を両方指定して下限 > 上限になった場合は上限が優先されます。" />
-        </label>
-        <InputNumber id="monthlyWithdrawalCeiling" v-model="state.monthlyWithdrawalCeilingMan" min="0" step="1" placeholder="例: 40" />
+        <table class="limit-table">
+          <thead>
+            <tr>
+              <th>〜歳まで</th>
+              <th>下限（万円）</th>
+              <th>上限（万円）</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(step, idx) in state.withdrawalLimitSteps" :key="idx">
+              <td>
+                <span v-if="idx === state.withdrawalLimitSteps.length - 1" class="terminal-label">以降</span>
+                <InputNumber v-else v-model="step.untilAge" min="0" max="120" step="1" placeholder="例: 69" />
+              </td>
+              <td>
+                <InputNumber v-model="step.floorMan" min="0" step="1" placeholder="無制限" />
+              </td>
+              <td>
+                <InputNumber v-model="step.ceilingMan" min="0" step="1" placeholder="無制限" />
+              </td>
+              <td>
+                <button
+                  v-if="idx !== state.withdrawalLimitSteps.length - 1"
+                  type="button"
+                  class="limit-remove"
+                  aria-label="削除"
+                  @click="$emit('removeLimitStep', idx)"
+                >×</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <button type="button" class="limit-add" @click="$emit('addLimitStep')">＋ 行を追加</button>
       </div>
     </template>
     <div v-if="!isRateMode" class="field checkbox-field">
@@ -59,3 +90,66 @@ const isRateMode = computed(
     </div>
   </div>
 </template>
+
+<style scoped>
+.limit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.limit-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.limit-table td {
+  padding: 4px 6px;
+  vertical-align: middle;
+}
+
+.limit-table td :deep(input) {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.terminal-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.limit-remove {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.limit-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.limit-add {
+  margin-top: 8px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  border-radius: 4px;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.limit-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+</style>

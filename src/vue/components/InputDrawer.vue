@@ -18,6 +18,8 @@ const emit = defineEmits<{
   applyDefensePreset: [key: string];
   addOtherIncome: [];
   removeOtherIncome: [id: string];
+  addLimitStep: [];
+  removeLimitStep: [idx: number];
   reset: [];
 }>();
 
@@ -61,7 +63,11 @@ watch(
             <InputProduct v-model="state" @apply-product-preset="emit('applyProductPreset', $event)" />
             <InputDefense v-model="state" @apply-defense-preset="emit('applyDefensePreset', $event)" />
             <InputPeriod v-model="state" />
-            <InputWithdrawal v-model="state" />
+            <InputWithdrawal
+              v-model="state"
+              @add-limit-step="emit('addLimitStep')"
+              @remove-limit-step="emit('removeLimitStep', $event)"
+            />
             <InputIdeco v-model="state" />
             <InputPension
               v-model="state"

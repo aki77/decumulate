@@ -1,9 +1,17 @@
 import { reactive, computed } from "vue";
 import { refDebounced } from "@vueuse/core";
 import { normalizeOtherIncomes, type OtherIncomeEntry } from "../../other-income.ts";
+import type { WithdrawalLimitStep } from "../../calculate.ts";
 import type { MonteCarloParams } from "../../monte-carlo.ts";
 
 export type WithdrawalMode = "amount" | "rate" | "rate-risk";
+
+// UI 入力用の年齢ステップ。万円・年齢入力。末尾の 1 行は untilAge=null（「以降」）。
+export interface WithdrawalLimitStepInput {
+  untilAge: number | null;
+  floorMan: number | null;
+  ceilingMan: number | null;
+}
 
 const MAN = 10000;
 const DEBOUNCE_MS = 200;
@@ -35,7 +43,7 @@ export const DEFENSE_PRESETS: Record<string, DefensePreset | null> = {
 };
 
 export interface ParamsState {
-  currentAge: number | null;
+  currentAge: number;
   initialNisaMan: number;
   initialNisaGainMan: number;
   initialTaxableRiskMan: number;
@@ -57,8 +65,7 @@ export interface ParamsState {
   withdrawalMode: WithdrawalMode;
   fixedMonthlyWithdrawalMan: number;
   withdrawalRate: number;
-  monthlyWithdrawalFloorMan: number | null;
-  monthlyWithdrawalCeilingMan: number | null;
+  withdrawalLimitSteps: WithdrawalLimitStepInput[];
   inflationAdjustedWithdrawal: boolean;
   basePensionMan: number;
   pensionStartAge: number;
@@ -97,8 +104,11 @@ export function makeDefaultOtherIncomeEntry(): OtherIncomeEntry {
   };
 }
 
-export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes"> & { otherIncomes: never[] } = {
-  currentAge: null,
+export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps"> & {
+  otherIncomes: never[];
+  withdrawalLimitSteps: WithdrawalLimitStepInput[];
+} = {
+  currentAge: 40,
   initialNisaMan: 0,
   initialNisaGainMan: 0,
   initialTaxableRiskMan: 0,
@@ -120,8 +130,7 @@ export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes"> & { otherIncomes:
   withdrawalMode: "amount",
   fixedMonthlyWithdrawalMan: 25,
   withdrawalRate: 4,
-  monthlyWithdrawalFloorMan: null,
-  monthlyWithdrawalCeilingMan: null,
+  withdrawalLimitSteps: [{ untilAge: null, floorMan: null, ceilingMan: null }],
   inflationAdjustedWithdrawal: false,
   basePensionMan: 0,
   pensionStartAge: 65,
@@ -143,6 +152,32 @@ export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes"> & { otherIncomes:
   idecoPensionYears: 10,
   otherIncomes: [],
 };
+
+// UI 入力の steps を計算層に渡せる schedule に正規化する。
+// - 万円→円
+// - untilAge 昇順ソート（数値の行のみ。null は終端として末尾に固定）
+// - 末尾は必ず untilAge=null の 1 行（無ければ補う、複数あれば 1 行に統合）
+function toLimitStep(s: WithdrawalLimitStepInput): WithdrawalLimitStep {
+  return {
+    untilAge: s.untilAge,
+    floor: s.floorMan != null ? s.floorMan * MAN : null,
+    ceiling: s.ceilingMan != null ? s.ceilingMan * MAN : null,
+  };
+}
+
+// UI 不変条件: 配列の最終要素のみが終端行（untilAge は値に関わらず無視）。
+// 非終端行で untilAge が空欄（null）のものは入力途中とみなして drop する。
+function normalizeLimitSteps(steps: WithdrawalLimitStepInput[]): WithdrawalLimitStep[] {
+  if (steps.length === 0) {
+    return [toLimitStep({ untilAge: null, floorMan: null, ceilingMan: null })];
+  }
+  const terminal = steps[steps.length - 1]!;
+  const finite = steps
+    .slice(0, -1)
+    .filter((s): s is WithdrawalLimitStepInput & { untilAge: number } => s.untilAge !== null)
+    .sort((a, b) => a.untilAge - b.untilAge);
+  return [...finite.map(toLimitStep), toLimitStep({ ...terminal, untilAge: null })];
+}
 
 export function useParams() {
   const state = reactive<ParamsState>({ ...DEFAULT_PARAMS });
@@ -174,10 +209,7 @@ export function useParams() {
       withdrawalMode: state.withdrawalMode,
       fixedMonthlyWithdrawal: state.fixedMonthlyWithdrawalMan * MAN,
       withdrawalRate: state.withdrawalRate,
-      monthlyWithdrawalFloor:
-        state.monthlyWithdrawalFloorMan != null ? state.monthlyWithdrawalFloorMan * MAN : null,
-      monthlyWithdrawalCeiling:
-        state.monthlyWithdrawalCeilingMan != null ? state.monthlyWithdrawalCeilingMan * MAN : null,
+      withdrawalLimitSchedule: normalizeLimitSteps(state.withdrawalLimitSteps),
       inflationAdjustedWithdrawal: state.inflationAdjustedWithdrawal,
       basePension: state.basePensionMan * MAN,
       pensionStartAge: state.pensionStartAge,
@@ -228,6 +260,29 @@ export function useParams() {
     if (idx !== -1) state.otherIncomes.splice(idx, 1);
   }
 
+  // 終端行（配列の最終要素）の直前に新しいステップを挿入する。
+  // 既存の最後の有限 untilAge より +5 歳を初期値にして、追加直後でも昇順を保つ。
+  function addLimitStep(): void {
+    const list = state.withdrawalLimitSteps;
+    let suggestedAge = state.currentAge + 10;
+    for (let i = 0; i < list.length - 1; i++) {
+      const a = list[i]!.untilAge;
+      if (a !== null && a >= suggestedAge) suggestedAge = a + 5;
+    }
+    list.splice(Math.max(0, list.length - 1), 0, {
+      untilAge: suggestedAge,
+      floorMan: null,
+      ceilingMan: null,
+    });
+  }
+
+  function removeLimitStep(idx: number): void {
+    const list = state.withdrawalLimitSteps;
+    // 終端 = 最終要素なので削除不可
+    if (idx < 0 || idx >= list.length - 1) return;
+    list.splice(idx, 1);
+  }
+
   return {
     state,
     debouncedMcParams,
@@ -235,6 +290,8 @@ export function useParams() {
     applyDefensePreset,
     addOtherIncome,
     removeOtherIncome,
+    addLimitStep,
+    removeLimitStep,
     MAN,
   };
 }

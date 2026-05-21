@@ -13,7 +13,7 @@ import CompoundChart from "./components/CompoundChart.vue";
 import MonteCarloChart from "./components/MonteCarloChart.vue";
 import MonthlyDetails from "./components/MonthlyDetails.vue";
 
-const { state, debouncedMcParams, applyProductPreset, applyDefensePreset, addOtherIncome, removeOtherIncome } = useParams();
+const { state, debouncedMcParams, applyProductPreset, applyDefensePreset, addOtherIncome, removeOtherIncome, addLimitStep, removeLimitStep } = useParams();
 const storage = useStorage(state);
 const { result } = useSimulator(debouncedMcParams);
 
@@ -102,6 +102,8 @@ function handleReset() {
       @apply-defense-preset="applyDefensePreset"
       @add-other-income="addOtherIncome"
       @remove-other-income="removeOtherIncome"
+      @add-limit-step="addLimitStep"
+      @remove-limit-step="removeLimitStep"
       @reset="handleReset"
     />
 

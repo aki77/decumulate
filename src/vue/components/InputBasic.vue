@@ -9,8 +9,8 @@ const state = defineModel<ParamsState>({ required: true });
   <div class="field-group">
     <h3>基本</h3>
     <div class="field">
-      <label for="currentAge">現在の年齢（任意）</label>
-      <InputNumber id="currentAge" v-model="state.currentAge" min="0" max="100" step="1" placeholder="例: 35" />
+      <label for="currentAge">現在の年齢</label>
+      <InputNumber id="currentAge" v-model="state.currentAge" min="0" max="100" step="1" placeholder="例: 35" required />
     </div>
     <div class="field">
       <label for="monthlyContribution">月額積立（万円）</label>
