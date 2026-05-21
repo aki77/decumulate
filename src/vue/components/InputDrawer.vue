@@ -128,6 +128,7 @@ watch(
   display: flex;
   flex-direction: column;
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
+  overflow-y: auto;
 }
 
 .drawer-header {
@@ -163,7 +164,6 @@ watch(
 }
 
 .drawer-body {
-  overflow-y: auto;
   padding: 16px 20px;
   flex: 1;
 }

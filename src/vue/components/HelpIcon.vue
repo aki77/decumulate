@@ -1,14 +1,18 @@
 <script setup lang="ts">
+import { useId } from "vue";
+
 defineProps<{ text: string; ariaLabel?: string; compact?: boolean }>();
+const anchorName = `--help-${useId()}`;
 </script>
 
 <template>
   <span
     class="help-icon"
     :class="{ 'help-icon--compact': compact }"
+    :style="{ anchorName }"
     tabindex="0"
     :aria-label="ariaLabel ?? 'ヘルプ'"
-  >?<span class="help-tip" v-html="text"></span></span>
+  >?<span class="help-tip" :style="{ positionAnchor: anchorName }" v-html="text"></span></span>
 </template>
 
 <style scoped>
@@ -47,10 +51,14 @@ defineProps<{ text: string; ariaLabel?: string; compact?: boolean }>();
 .help-icon .help-tip {
   visibility: hidden;
   opacity: 0;
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
+  position-area: top;
+  position-try-fallbacks:
+    bottom,
+    top right,
+    bottom right,
+    top left,
+    bottom left;
   background: var(--text);
   color: var(--panel);
   font-size: 12px;
@@ -66,6 +74,7 @@ defineProps<{ text: string; ariaLabel?: string; compact?: boolean }>();
   pointer-events: none;
   transition: opacity 0.15s ease;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  margin-bottom: 6px;
 }
 
 .help-icon:hover .help-tip,
