@@ -732,7 +732,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         age: currentAge != null ? currentAge + year : null,
         nisaTotal: Math.round(nisaTotal),
         taxableRiskTotal: Math.round(taxableRiskTotal),
-        riskTotal: Math.round(nisaTotal + taxableRiskTotal),
+        riskTotal: Math.round(nisaTotal + taxableRiskTotal + idecoState.total),
         defenseTotal: Math.round(defenseTotal),
         idecoTotal: Math.round(idecoState.total),
         total: Math.round(nisaTotal + taxableRiskTotal + defenseTotal + idecoState.total),

@@ -307,7 +307,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       age: currentAge != null ? currentAge + raw.year : null,
       nisaTotal: Math.round(raw.nisaTotal),
       taxableRiskTotal: Math.round(raw.taxableRiskTotal),
-      riskTotal: Math.round(raw.nisaTotal + raw.taxableRiskTotal),
+      riskTotal: Math.round(raw.nisaTotal + raw.taxableRiskTotal + raw.idecoTotal),
       defenseTotal: Math.round(raw.defenseTotal),
       idecoTotal: Math.round(raw.idecoTotal),
       total: Math.round(

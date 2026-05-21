@@ -57,7 +57,7 @@ interface YearGroup {
 }
 
 const showIdeco = computed(() => props.params.idecoEnabled);
-const riskColspan = computed(() => showIdeco.value ? 4 : 3);
+const riskColspan = computed(() => showIdeco.value ? 5 : 4);
 
 function buildRiskBreakdownHtml(r: MonthlyProjection): string {
   const lines = [
@@ -166,7 +166,7 @@ const yearGroups = computed<YearGroup[]>(() => {
             <th rowspan="2">イベント</th>
           </tr>
           <tr>
-            <th>特定リスク</th><th>NISA</th><th v-if="showIdeco">iDeCo</th><th>リスク損益</th>
+            <th>特定リスク</th><th>NISA</th><th v-if="showIdeco">iDeCo</th><th>リスク計</th><th>リスク損益</th>
             <th>防衛額</th><th>防衛損益</th>
             <th>純引出</th><th>年金</th><th>他収入</th>
           </tr>
@@ -185,6 +185,10 @@ const yearGroups = computed<YearGroup[]>(() => {
             <td v-if="showIdeco">
               {{ formatMan(row.src.idecoTotal) }}
               <span v-if="row.src.total > 0" class="cell-sub">({{ formatPercent(row.src.idecoTotal / row.src.total) }})</span>
+            </td>
+            <td>
+              {{ formatMan(row.src.riskTotal) }}
+              <span v-if="row.src.total > 0" class="cell-sub">({{ formatPercent(row.src.riskTotal / row.src.total) }})</span>
             </td>
             <td :class="row.riskCombined < 0 ? 'neg' : ''">
               {{ formatMonthlyGain(row.riskCombined) }}
