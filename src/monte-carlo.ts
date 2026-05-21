@@ -22,8 +22,8 @@ import {
   type IdecoPayoutEvent,
 } from "./ideco.ts";
 
-const NUM_SIMULATIONS = 5000;
-const SEED = 42;
+export const NUM_SIMULATIONS = 5000;
+export const SEED = 42;
 
 export interface MonteCarloParams extends CalculateParams {
   volatility: number;
@@ -48,6 +48,17 @@ export type PercentileKey = "p10" | "p25" | "p50" | "p75" | "p90";
 export const PERCENTILE_KEYS: readonly PercentileKey[] = ["p10", "p25", "p50", "p75", "p90"];
 export type PivotMonthlies = Record<PercentileKey, MonthlyProjection[]>;
 
+export interface SequenceP10Diagnostics {
+  pathIndex: number;
+  sequenceReturn: number;
+  seqWindowMonths: number;
+  baseTotalAtWithdrawalStart: number;
+  totalAtSeqWindowEnd: number;
+  finalTotal: number;
+  validPathCount: number;
+  p50FinalForReference: number;
+}
+
 export interface MonteCarloResult {
   yearly: MonteCarloYearly[];
   failureProbability: number;
@@ -59,6 +70,9 @@ export interface MonteCarloResult {
   maxDrawdownP50: number;
   maxDrawdownP90: number;
   pivotMonthlies: PivotMonthlies;
+  sequenceP10Monthly: MonthlyProjection[];
+  sequenceRiskDepletionAge: number | null;
+  sequenceP10Diagnostics: SequenceP10Diagnostics | null;
 }
 
 export interface SecurityScoreInput {
@@ -221,25 +235,39 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     ? Math.max(0, Math.min(1, ideco.idecoLumpSumRatio))
     : 0;
 
+  const seqWindow = Math.min(60, withdrawalYears * 12);
+
+  type PivotSpec = {
+    percentiles: Record<PercentileKey, number>;
+    sequenceP10: number | null;
+  };
+
   // 本体ループを内部関数化している理由: pivotMask=null（フェーズ1）と pivotMask=非null（フェーズ2）の
   // 間で RNG 消費順序を完全に揃えることで、両フェーズが同じパスを生成し再現性を保つ。
   const runSimulation = (
-    pivotIndices: Record<PercentileKey, number> | null,
+    pivotSpec: PivotSpec | null,
   ): {
     yearly: MonteCarloYearly[];
     failureProbability: number;
     finalTotals: Float64Array | null;
+    sequenceReturns: Float64Array | null;
     pivotMonthlies: PivotMonthlies;
+    sequenceP10Monthly: MonthlyProjection[];
     maxDrawdown: { p10: number; p50: number; p90: number } | null;
   } => {
   // ホットループ（N×12×totalYears 回）で O(1) かつ分岐予測しやすい判定にするため、
   // パス index → 該当パーセンタイル の対応を Uint8Array のビットマスクで保持する。
   // 同一 index が複数パーセンタイルに最近接になる稀なケースもビット OR で表現できる。
-  const pivotMaskByIndex = pivotIndices ? new Uint8Array(N) : null;
-  if (pivotIndices && pivotMaskByIndex) {
+  // bit 0〜4: p10/p25/p50/p75/p90 の各パーセンタイル, bit 5: sequenceP10
+  const SEQUENCE_BIT = PERCENTILE_KEYS.length; // = 5
+  const pivotMaskByIndex = pivotSpec ? new Uint8Array(N) : null;
+  if (pivotSpec) {
     for (let bit = 0; bit < PERCENTILE_KEYS.length; bit++) {
       const k = PERCENTILE_KEYS[bit]!;
-      pivotMaskByIndex[pivotIndices[k]]! |= 1 << bit;
+      pivotMaskByIndex![pivotSpec.percentiles[k]]! |= 1 << bit;
+    }
+    if (pivotSpec.sequenceP10 !== null) {
+      pivotMaskByIndex![pivotSpec.sequenceP10]! |= 1 << SEQUENCE_BIT;
     }
   }
   const keysForMask = (mask: number): PercentileKey[] => {
@@ -261,11 +289,10 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const useIdeco = idecoEnabled && idecoPaths !== null;
   // 下落判定は「リスクサイド合計」のHWMで判断する
   const riskSideHWM = priorityOnDrawdown ? new Float64Array(N).fill(initialRiskSide) : null;
-  // MaxDD 統計: phase1（全 N パス集計）かつ取り崩し期間ありの時のみ追跡。
-  // 取り崩し開始月以降の total（NISA+特定+防衛+iDeCo）ピークからの最大下落率をパスごとに記録する。
-  const enableMaxDD = pivotIndices === null && withdrawalYears > 0;
-  const totalHWM = enableMaxDD ? new Float64Array(N) : null;
-  const maxDrawdownByPath = enableMaxDD ? new Float64Array(N) : null;
+  // phase1（全 N パス集計）かつ取り崩し期間ありの時のみ MaxDD・シーケンスリターンを追跡する
+  const isPhase1WithWithdrawal = pivotSpec === null && withdrawalYears > 0;
+  const totalHWM = isPhase1WithWithdrawal ? new Float64Array(N) : null;
+  const maxDrawdownByPath = isPhase1WithWithdrawal ? new Float64Array(N) : null;
   const cumulativeWithdrawals = new Float64Array(N);
   const rateBasedMonthlyWithdrawal = new Float64Array(N);
   const rateWithdrawalInitialized = new Uint8Array(N);
@@ -283,45 +310,47 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     p75: [],
     p90: [],
   };
+  const sequenceP10Monthly: MonthlyProjection[] = [];
+  const baseTotalByPath = isPhase1WithWithdrawal ? new Float64Array(N) : null;
+  const sequenceReturns = isPhase1WithWithdrawal ? new Float64Array(N).fill(NaN) : null;
 
-  const pushPivotRow = (
-    keys: readonly PercentileKey[],
-    raw: {
-      year: number;
-      month: number;
-      prevNisa: number;
-      prevTaxable: number;
-      prevDefense: number;
-      prevIdeco: number;
-      nisaTotal: number;
-      taxableRiskTotal: number;
-      defenseTotal: number;
-      idecoTotal: number;
-      monthlyWithdrawal: number;
-      monthlyWithdrawalNisa: number;
-      monthlyWithdrawalTaxableRisk: number;
-      monthlyWithdrawalDefense: number;
-      monthlyWithdrawalTaxTaxableRisk: number;
-      monthlyWithdrawalTaxDefense: number;
-      monthlyPension: number;
-      monthlyOtherIncome: number;
-      monthlyGainRisk: number;
-      monthlyGainNisa: number;
-      monthlyGainTaxableRisk: number;
-      monthlyGainDefense: number;
-      monthlyGainIdeco: number;
-      rebalanceInfo: RebalanceInfo | null;
-      nisaTransferInfo: NisaTransferInfo | null;
-      idecoLumpSumInfo: IdecoPayoutEvent | null;
-      idecoPensionInfo: IdecoPayoutEvent | null;
-    },
-  ): void => {
+  type RawRowInput = {
+    year: number;
+    month: number;
+    prevNisa: number;
+    prevTaxable: number;
+    prevDefense: number;
+    prevIdeco: number;
+    nisaTotal: number;
+    taxableRiskTotal: number;
+    defenseTotal: number;
+    idecoTotal: number;
+    monthlyWithdrawal: number;
+    monthlyWithdrawalNisa: number;
+    monthlyWithdrawalTaxableRisk: number;
+    monthlyWithdrawalDefense: number;
+    monthlyWithdrawalTaxTaxableRisk: number;
+    monthlyWithdrawalTaxDefense: number;
+    monthlyPension: number;
+    monthlyOtherIncome: number;
+    monthlyGainRisk: number;
+    monthlyGainNisa: number;
+    monthlyGainTaxableRisk: number;
+    monthlyGainDefense: number;
+    monthlyGainIdeco: number;
+    rebalanceInfo: RebalanceInfo | null;
+    nisaTransferInfo: NisaTransferInfo | null;
+    idecoLumpSumInfo: IdecoPayoutEvent | null;
+    idecoPensionInfo: IdecoPayoutEvent | null;
+  };
+
+  const buildRow = (raw: RawRowInput): MonthlyProjection => {
     const prevTotal = raw.prevNisa + raw.prevTaxable + raw.prevDefense + raw.prevIdeco;
     const monthlyRate =
       prevTotal > 0
         ? (raw.monthlyGainRisk + raw.monthlyGainDefense + raw.monthlyGainIdeco) / prevTotal
         : 0;
-    const row: MonthlyProjection = {
+    return {
       year: raw.year,
       month: raw.month,
       age: currentAge + raw.year,
@@ -362,6 +391,10 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       idecoLumpSumInfo: raw.idecoLumpSumInfo,
       idecoPensionInfo: raw.idecoPensionInfo,
     };
+  };
+
+  const pushPivotRow = (keys: readonly PercentileKey[], raw: RawRowInput): void => {
+    const row = buildRow(raw);
     for (const k of keys) pivotMonthlies[k].push(row);
   };
 
@@ -441,6 +474,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
 
     for (let m = 0; m < 12; m++) {
       const isWithdrawalStartMonth = isFirstWithdrawalYear && m === 0;
+      // シーケンスリターン計算: 取り崩し開始からの経過月（i に依存しないので m ループ先頭で計算）
+      const monthsFromWithdrawalStart = isWithdrawing
+        ? (year - withdrawalStartYear - 1) * 12 + (m + 1)
+        : -1;
+      const isSeqWindowEnd = isPhase1WithWithdrawal && monthsFromWithdrawalStart === seqWindow;
 
       // i に依存しない iDeCo フェーズ判定を m ループ先頭で先計算する
       const idecoContributing =
@@ -556,6 +594,13 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
         }
 
         const total = riskSide + defenseValue;
+
+        if (baseTotalByPath !== null && isWithdrawalStartMonth) {
+          baseTotalByPath[i] = total > 0 ? total : 1;
+        }
+        if (sequenceReturns !== null && isSeqWindowEnd) {
+          sequenceReturns[i] = total / baseTotalByPath![i]! - 1;
+        }
 
         if (totalHWM !== null && maxDrawdownByPath !== null) {
           if (isWithdrawalStartMonth) {
@@ -790,8 +835,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
           }
         }
 
-        if (recordPivot) {
-          pushPivotRow(keysForMask(pivotMask), {
+        const isSequencePivot = pivotMaskByIndex !== null && (pivotMaskByIndex[i]! & (1 << SEQUENCE_BIT)) !== 0;
+        if (recordPivot || isSequencePivot) {
+          const rawRow = {
             year,
             month: m + 1,
             prevNisa,
@@ -820,7 +866,13 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
             nisaTransferInfo: m === 0 ? nisaTransferByIndex.get(i) ?? null : null,
             idecoLumpSumInfo: idecoLumpSumRecorded,
             idecoPensionInfo: idecoPensionRecorded,
-          });
+          };
+          if (recordPivot) {
+            pushPivotRow(keysForMask(pivotMask), rawRow);
+          }
+          if (isSequencePivot) {
+            sequenceP10Monthly.push(buildRow(rawRow));
+          }
         }
       }
 
@@ -860,7 +912,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const totalContributed =
     initialTotal + monthlyContribution * 12 * Math.min(contributionYears, totalYears);
   let failureCount = 0;
-  const finalTotals = pivotIndices === null ? new Float64Array(N) : null;
+  const finalTotals = pivotSpec === null ? new Float64Array(N) : null;
   for (let i = 0; i < N; i++) {
     let finalTotal = nisaPaths[i]! + taxablePaths[i]!;
     if (useDefense && defensePaths !== null) finalTotal += defensePaths[i]!;
@@ -880,7 +932,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     yearly,
     failureProbability: failureCount / N,
     finalTotals,
+    sequenceReturns,
     pivotMonthlies,
+    sequenceP10Monthly,
     maxDrawdown,
   };
   };
@@ -923,7 +977,50 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     }
   }
 
-  const phase2 = runSimulation(pivotIndices);
+  // シーケンスリターン下位 10% パスを選定
+  let sequenceP10Index: number | null = null;
+  let validSeqPathCount = 0;
+  if (phase1.sequenceReturns !== null) {
+    const valid: number[] = [];
+    for (let i = 0; i < N; i++) {
+      if (Number.isFinite(phase1.sequenceReturns[i]!)) valid.push(i);
+    }
+    validSeqPathCount = valid.length;
+    if (valid.length > 0) {
+      const sr = phase1.sequenceReturns;
+      valid.sort((a, b) => sr[a]! - sr[b]!);
+      const idx = Math.min(valid.length - 1, Math.floor(valid.length * 0.1));
+      sequenceP10Index = valid[idx]!;
+    }
+  }
+
+  const phase2 = runSimulation({ percentiles: pivotIndices, sequenceP10: sequenceP10Index });
+
+  let sequenceRiskDepletionAge: number | null = null;
+  for (const row of phase2.sequenceP10Monthly) {
+    if (row.total <= 0) {
+      sequenceRiskDepletionAge = row.age;
+      break;
+    }
+  }
+
+  let sequenceP10Diagnostics: SequenceP10Diagnostics | null = null;
+  if (sequenceP10Index !== null && phase1.sequenceReturns !== null) {
+    const seqMonthly = phase2.sequenceP10Monthly;
+    const seqWindowEnd = seqMonthly[seqWindow - 1];
+    const seqFinal = seqMonthly[seqMonthly.length - 1];
+    const sequenceReturn = phase1.sequenceReturns[sequenceP10Index]!;
+    sequenceP10Diagnostics = {
+      pathIndex: sequenceP10Index,
+      sequenceReturn,
+      seqWindowMonths: seqWindow,
+      baseTotalAtWithdrawalStart: seqWindowEnd ? seqWindowEnd.total / (1 + sequenceReturn) : 0,
+      totalAtSeqWindowEnd: seqWindowEnd?.total ?? 0,
+      finalTotal: seqFinal?.total ?? 0,
+      validPathCount: validSeqPathCount,
+      p50FinalForReference: finalP50,
+    };
+  }
 
   return {
     yearly: phase1.yearly,
@@ -936,6 +1033,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     maxDrawdownP50: phase1.maxDrawdown?.p50 ?? 0,
     maxDrawdownP90: phase1.maxDrawdown?.p90 ?? 0,
     pivotMonthlies: phase2.pivotMonthlies,
+    sequenceP10Monthly: phase2.sequenceP10Monthly,
+    sequenceRiskDepletionAge,
+    sequenceP10Diagnostics,
   };
 }
 

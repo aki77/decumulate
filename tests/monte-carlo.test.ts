@@ -712,3 +712,95 @@ test("simulateMonteCarlo - withdrawalYears=0 では maxDrawdown は 0（フォ�
   assert.strictEqual(result.maxDrawdownP50, 0);
   assert.strictEqual(result.maxDrawdownP90, 0);
 });
+
+// --- Sequence-of-Returns ストレスシナリオ ---
+
+test("simulateMonteCarlo - sequenceP10Monthly の長さは 12 × totalYears", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    contributionYears: 3,
+    withdrawalStartYear: 3,
+    withdrawalYears: 5,
+  };
+  const result = simulateMonteCarlo(params);
+  const totalYears = Math.max(params.contributionYears, params.withdrawalStartYear + params.withdrawalYears);
+  assert.strictEqual(result.sequenceP10Monthly.length, 12 * totalYears);
+});
+
+test("simulateMonteCarlo - sequenceP10Monthly はシード固定で完全一致", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    ...withBuckets(5000000),
+    withdrawalYears: 10,
+    volatility: 20,
+    fixedMonthlyWithdrawal: 30000,
+  };
+  const r1 = simulateMonteCarlo(params);
+  const r2 = simulateMonteCarlo(params);
+  assert.strictEqual(r1.sequenceP10Monthly.length, r2.sequenceP10Monthly.length);
+  for (let i = 0; i < r1.sequenceP10Monthly.length; i++) {
+    assert.strictEqual(r1.sequenceP10Monthly[i]!.total, r2.sequenceP10Monthly[i]!.total);
+    assert.strictEqual(r1.sequenceP10Monthly[i]!.monthlyGain, r2.sequenceP10Monthly[i]!.monthlyGain);
+  }
+  assert.strictEqual(r1.sequenceRiskDepletionAge, r2.sequenceRiskDepletionAge);
+});
+
+test("simulateMonteCarlo - sequenceP10 の 5 年累積リターンは p50 パスより低い", () => {
+  const initialAmount = 10000000;
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    ...withBuckets(initialAmount),
+    withdrawalStartYear: 0,
+    withdrawalYears: 10,
+    fixedMonthlyWithdrawal: 30000,
+    volatility: 20,
+  };
+  const result = simulateMonteCarlo(params);
+  // 5 年目末（index 59）の total を比較
+  const seq60 = result.sequenceP10Monthly[59]!.total;
+  const p50_60 = result.pivotMonthlies.p50[59]!.total;
+  const seqReturn = seq60 / initialAmount - 1;
+  const p50Return = p50_60 / initialAmount - 1;
+  assert.ok(seqReturn < p50Return, `seqReturn=${seqReturn.toFixed(4)} >= p50Return=${p50Return.toFixed(4)}`);
+});
+
+test("simulateMonteCarlo - sequenceRiskDepletionAge は範囲内または null", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    ...withBuckets(1000000),
+    currentAge: 50,
+    withdrawalStartYear: 0,
+    withdrawalYears: 30,
+    fixedMonthlyWithdrawal: 200000,
+    volatility: 25,
+  };
+  const result = simulateMonteCarlo(params);
+  if (result.sequenceRiskDepletionAge !== null) {
+    assert.ok(result.sequenceRiskDepletionAge >= 51,
+      `age=${result.sequenceRiskDepletionAge} < 51`);
+    assert.ok(result.sequenceRiskDepletionAge <= 80,
+      `age=${result.sequenceRiskDepletionAge} > 80`);
+  }
+});
+
+test("simulateMonteCarlo - withdrawalYears<5 でも sequenceP10Monthly が選定される", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    ...withBuckets(5000000),
+    withdrawalYears: 3,
+    volatility: 15,
+    fixedMonthlyWithdrawal: 10000,
+  };
+  const result = simulateMonteCarlo(params);
+  assert.strictEqual(result.sequenceP10Monthly.length, 12 * 3);
+});
+
+test("simulateMonteCarlo - withdrawalYears=0 では sequenceP10Monthly は空で枯渇年齢は null", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    withdrawalYears: 0,
+  };
+  const result = simulateMonteCarlo(params);
+  assert.strictEqual(result.sequenceP10Monthly.length, 0);
+  assert.strictEqual(result.sequenceRiskDepletionAge, null);
+});
