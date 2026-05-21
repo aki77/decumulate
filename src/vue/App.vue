@@ -52,6 +52,14 @@ function handleReset() {
   state.targetDefenseRatioPercent = estimateTargetDefenseRatioPercent();
 }
 
+function handleExport() {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([storage.exportData()], { type: "application/json" }));
+  a.download = "decumulate-inputs.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 100);
+}
+
 </script>
 
 <template>
@@ -105,6 +113,8 @@ function handleReset() {
       @add-limit-step="addLimitStep"
       @remove-limit-step="removeLimitStep"
       @reset="handleReset"
+      @export="handleExport"
+      @import="storage.importData"
     />
 
     <footer class="page-footer">

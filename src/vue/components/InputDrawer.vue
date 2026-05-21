@@ -21,7 +21,20 @@ const emit = defineEmits<{
   addLimitStep: [];
   removeLimitStep: [idx: number];
   reset: [];
+  export: [];
+  import: [data: string];
 }>();
+
+function handleImport(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (typeof reader.result === "string") emit("import", reader.result);
+    (e.target as HTMLInputElement).value = "";
+  };
+  reader.readAsText(file);
+}
 
 const state = defineModel<ParamsState>({ required: true });
 const drawerEl = useTemplateRef<HTMLElement>("drawerEl");
@@ -75,6 +88,13 @@ watch(
               @remove-other-income="emit('removeOtherIncome', $event)"
             />
             <div class="form-actions">
+              <div class="form-actions-left">
+                <button type="button" class="action-button" @click="emit('export')">エクスポート</button>
+                <label class="action-button">
+                  インポート
+                  <input type="file" accept=".json" style="display:none" @change="handleImport">
+                </label>
+              </div>
               <button type="button" class="reset-button" @click="emit('reset')">入力をリセット</button>
             </div>
           </div>
@@ -153,7 +173,29 @@ watch(
   padding-top: 16px;
   border-top: 1px solid var(--border);
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-actions-left {
+  display: flex;
+  gap: 8px;
+}
+
+.action-button {
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.action-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .reset-button {

@@ -32,10 +32,8 @@ function isWithdrawalLimitStep(v: unknown): v is WithdrawalLimitStepInput {
   );
 }
 
-function loadFromStorage(): Partial<StoredState> | null {
+function parseStoredData(raw: string): Partial<StoredState> | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
     const data = JSON.parse(raw) as Record<string, unknown>;
     if (!data || typeof data !== "object") return null;
 
@@ -100,6 +98,16 @@ function loadFromStorage(): Partial<StoredState> | null {
   }
 }
 
+function loadFromStorage(): Partial<StoredState> | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return parseStoredData(raw);
+  } catch {
+    return null;
+  }
+}
+
 function saveToStorage(state: ParamsState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -127,5 +135,16 @@ export function useStorage(state: ParamsState) {
     });
   }
 
-  return { load, reset, startAutoSave };
+  function exportData(): string {
+    return JSON.stringify(state);
+  }
+
+  function importData(raw: string): boolean {
+    const parsed = parseStoredData(raw);
+    if (!parsed) return false;
+    Object.assign(state, parsed);
+    return true;
+  }
+
+  return { load, reset, startAutoSave, exportData, importData };
 }
