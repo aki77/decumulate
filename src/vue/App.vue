@@ -50,16 +50,10 @@ function handleReset() {
   state.targetDefenseRatioPercent = estimateTargetDefenseRatioPercent();
 }
 
-function preventNumberScroll(e: WheelEvent) {
-  const el = document.activeElement;
-  if (el instanceof HTMLInputElement && el.type === "number" && e.target === el) {
-    e.preventDefault();
-  }
-}
 </script>
 
 <template>
-  <div @wheel.capture="preventNumberScroll" style="display: contents">
+  <div style="display: contents">
     <header class="page-header">
       <div class="page-header-top">
         <h1>資産切り崩しシミュレーター</h1>

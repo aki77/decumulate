@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HelpIcon from "./HelpIcon.vue";
+import InputNumber from "./InputNumber.vue";
 import { PRESETS, type ParamsState } from "../composables/useParams.ts";
 
 const state = defineModel<ParamsState>({ required: true });
@@ -34,28 +35,28 @@ function onPresetChange(e: Event) {
         想定利回り（%/年）
         <HelpIcon text="年あたりの期待リターン。インデックス投信なら過去実績ベースで 5〜10% 程度が目安。" />
       </label>
-      <input id="annualReturnRate" v-model.number="state.annualReturnRate" type="number" min="0" max="15" step="0.1" />
+      <InputNumber id="annualReturnRate" v-model="state.annualReturnRate" min="0" max="15" step="0.1" />
     </div>
     <div class="field">
       <label for="expenseRatio">
         信託報酬（%/年）
         <HelpIcon text="投資信託を保有している間、毎年資産から差し引かれる運用コスト。" />
       </label>
-      <input id="expenseRatio" v-model.number="state.expenseRatio" type="number" min="0" max="3" step="0.01" />
+      <InputNumber id="expenseRatio" v-model="state.expenseRatio" min="0" max="3" step="0.01" />
     </div>
     <div class="field">
       <label for="volatility">
         ボラティリティ（%/年）
         <HelpIcon text="リターンのブレ幅（年率標準偏差）。値が大きいほど短期の値動きが激しく、モンテカルロのバラツキが大きくなる。" />
       </label>
-      <input id="volatility" v-model.number="state.volatility" type="number" min="5" max="30" step="1" />
+      <InputNumber id="volatility" v-model="state.volatility" min="5" max="30" step="1" />
     </div>
     <div class="field">
       <label for="inflationRate">
         インフレ率（%/年）
         <HelpIcon text="物価上昇率。実質値（購買力）を計算する際に名目値から差し引く。" />
       </label>
-      <input id="inflationRate" v-model.number="state.inflationRate" type="number" min="0" max="10" step="0.1" />
+      <InputNumber id="inflationRate" v-model="state.inflationRate" min="0" max="10" step="0.1" />
     </div>
   </div>
 </template>

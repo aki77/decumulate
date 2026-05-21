@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HelpIcon from "./HelpIcon.vue";
+import InputNumber from "./InputNumber.vue";
 import type { ParamsState } from "../composables/useParams.ts";
 
 const state = defineModel<ParamsState>({ required: true });
@@ -13,34 +14,34 @@ const state = defineModel<ParamsState>({ required: true });
     </h3>
     <div class="field">
       <label for="initialNisa">NISA 時価（万円）</label>
-      <input id="initialNisa" v-model.number="state.initialNisaMan" type="number" min="0" step="1" />
+      <InputNumber id="initialNisa" v-model="state.initialNisaMan" min="0" step="1" />
     </div>
     <div class="field">
       <label for="initialNisaGain">うちNISA 含み益（万円）</label>
-      <input id="initialNisaGain" v-model.number="state.initialNisaGainMan" type="number" min="0" step="1" />
+      <InputNumber id="initialNisaGain" v-model="state.initialNisaGainMan" min="0" step="1" />
     </div>
     <div class="field">
       <label for="initialTaxableRisk">特定リスク 時価（万円）</label>
-      <input id="initialTaxableRisk" v-model.number="state.initialTaxableRiskMan" type="number" min="0" step="1" />
+      <InputNumber id="initialTaxableRisk" v-model="state.initialTaxableRiskMan" min="0" step="1" />
     </div>
     <div class="field">
       <label for="initialTaxableRiskGain">うち特定リスク 含み益（万円）</label>
-      <input id="initialTaxableRiskGain" v-model.number="state.initialTaxableRiskGainMan" type="number" min="0" step="1" />
+      <InputNumber id="initialTaxableRiskGain" v-model="state.initialTaxableRiskGainMan" min="0" step="1" />
     </div>
     <div class="field">
       <label for="initialDefense">防衛資産 時価（万円）</label>
-      <input id="initialDefense" v-model.number="state.initialDefenseMan" type="number" min="0" step="1" />
+      <InputNumber id="initialDefense" v-model="state.initialDefenseMan" min="0" step="1" />
     </div>
     <div class="field">
       <label for="initialDefenseGain">うち防衛資産 含み益（万円）</label>
-      <input id="initialDefenseGain" v-model.number="state.initialDefenseGainMan" type="number" min="0" step="1" />
+      <InputNumber id="initialDefenseGain" v-model="state.initialDefenseGainMan" min="0" step="1" />
     </div>
     <div class="field">
       <label for="nisaInitialLifetimeUsed">
         NISA生涯枠の既使用額（万円）
         <HelpIcon text="既にNISAで買付済みの累計額（買付ベース）。生涯1800万円（夫婦モードで3600万円）から差し引く。" />
       </label>
-      <input id="nisaInitialLifetimeUsed" v-model.number="state.nisaInitialLifetimeUsedMan" type="number" min="0" step="1" />
+      <InputNumber id="nisaInitialLifetimeUsed" v-model="state.nisaInitialLifetimeUsedMan" min="0" step="1" />
     </div>
     <div class="field checkbox-field">
       <input id="isCoupled" v-model="state.isCoupled" type="checkbox" />

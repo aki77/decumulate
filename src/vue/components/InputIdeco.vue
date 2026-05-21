@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HelpIcon from "./HelpIcon.vue";
+import InputNumber from "./InputNumber.vue";
 import type { ParamsState } from "../composables/useParams.ts";
 
 const state = defineModel<ParamsState>({ required: true });
@@ -18,46 +19,46 @@ const state = defineModel<ParamsState>({ required: true });
     <template v-if="state.idecoEnabled">
       <div class="field">
         <label for="initialIdeco">iDeCo 時価（万円）</label>
-        <input id="initialIdeco" v-model.number="state.initialIdecoMan" type="number" min="0" step="1" />
+        <InputNumber id="initialIdeco" v-model="state.initialIdecoMan" min="0" step="1" />
       </div>
       <div class="field">
         <label for="initialIdecoGain">うちiDeCo 含み益（万円）</label>
-        <input id="initialIdecoGain" v-model.number="state.initialIdecoGainMan" type="number" min="0" step="1" />
+        <InputNumber id="initialIdecoGain" v-model="state.initialIdecoGainMan" min="0" step="1" />
       </div>
       <div class="field">
         <label for="idecoMonthlyContribution">
           月額拠出（万円）
           <HelpIcon text="職業区分により上限が異なる（会社員DC無 2.3万、自営業 6.8万 など）。上限チェックは行わない。" />
         </label>
-        <input id="idecoMonthlyContribution" v-model.number="state.idecoMonthlyContributionMan" type="number" min="0" step="0.1" />
+        <InputNumber id="idecoMonthlyContribution" v-model="state.idecoMonthlyContributionMan" min="0" step="0.1" />
       </div>
       <div class="field">
         <label for="idecoContributionYears">
           拠出年数
           <HelpIcon text="現在から何年間iDeCo拠出を続けるか。退職所得控除の勤続年数としても使われる。" />
         </label>
-        <input id="idecoContributionYears" v-model.number="state.idecoContributionYears" type="number" min="0" max="50" step="1" />
+        <InputNumber id="idecoContributionYears" v-model="state.idecoContributionYears" min="0" max="50" step="1" />
       </div>
       <div class="field">
         <label for="idecoReceiveStartAge">
           受取開始年齢
           <HelpIcon text="通常60〜75歳。現在年齢が空欄なら「現在から○年後」として扱う。" />
         </label>
-        <input id="idecoReceiveStartAge" v-model.number="state.idecoReceiveStartAge" type="number" min="60" max="75" step="1" />
+        <InputNumber id="idecoReceiveStartAge" v-model="state.idecoReceiveStartAge" min="60" max="75" step="1" />
       </div>
       <div class="field">
         <label for="idecoLumpSumRatio">
           一時金比率（%）
           <HelpIcon text="受取総額のうち一時金で受け取る割合。100%なら全額一時金（特定リスクへ振替）、0%なら全額年金、間の値で併用。" />
         </label>
-        <input id="idecoLumpSumRatio" v-model.number="state.idecoLumpSumRatio" type="number" min="0" max="100" step="1" />
+        <InputNumber id="idecoLumpSumRatio" v-model="state.idecoLumpSumRatio" min="0" max="100" step="1" />
       </div>
       <div class="field">
         <label for="idecoPensionYears">
           年金受取期間（年）
           <HelpIcon text="5〜20年が一般的。一時金比率100%の場合は無視される。期間中も運用が継続し、毎月「現在残高÷残月数」を取り崩しに合流させる。" />
         </label>
-        <input id="idecoPensionYears" v-model.number="state.idecoPensionYears" type="number" min="1" max="30" step="1" />
+        <InputNumber id="idecoPensionYears" v-model="state.idecoPensionYears" min="1" max="30" step="1" />
       </div>
     </template>
   </div>

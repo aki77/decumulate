@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HelpIcon from "./HelpIcon.vue";
+import InputNumber from "./InputNumber.vue";
 import { DEFENSE_PRESETS, type ParamsState } from "../composables/useParams.ts";
 
 const state = defineModel<ParamsState>({ required: true });
@@ -31,21 +32,21 @@ function onPresetChange(e: Event) {
         防衛資産の想定利回り（%/年）
         <HelpIcon text="防衛資産の期待リターン。個人向け国債変動10年は 0.5% 前後、普通預金は 0.1% 前後。" />
       </label>
-      <input id="defenseAnnualReturnRate" v-model.number="state.defenseAnnualReturnRate" type="number" min="0" max="10" step="0.1" />
+      <InputNumber id="defenseAnnualReturnRate" v-model="state.defenseAnnualReturnRate" min="0" max="10" step="0.1" />
     </div>
     <div class="field">
       <label for="defenseVolatility">
         防衛資産のボラティリティ（%/年）
         <HelpIcon text="価格変動の年率標準偏差。元本保証商品（国債・預金）なら 0% で OK。" />
       </label>
-      <input id="defenseVolatility" v-model.number="state.defenseVolatility" type="number" min="0" max="20" step="0.5" />
+      <InputNumber id="defenseVolatility" v-model="state.defenseVolatility" min="0" max="20" step="0.5" />
     </div>
     <div class="field">
       <label for="targetDefenseRatioPercent">
         目標防衛割合（%）
         <HelpIcon text="資産総額（リスク＋防衛＋iDeCo）に対する防衛資産の目標比率。月末リバランスはこの比率に戻すよう動作する。0% にすると防衛バケットを使わない運用。初回起動時は初期残高から自動算出される。" />
       </label>
-      <input id="targetDefenseRatioPercent" v-model.number="state.targetDefenseRatioPercent" type="number" min="0" max="100" step="1" />
+      <InputNumber id="targetDefenseRatioPercent" v-model="state.targetDefenseRatioPercent" min="0" max="100" step="1" />
     </div>
     <div class="field checkbox-field">
       <input id="defensePriorityOnDrawdown" v-model="state.defensePriorityOnDrawdown" type="checkbox" />
@@ -58,7 +59,7 @@ function onPresetChange(e: Event) {
           下落判定の閾値（%）
           <HelpIcon text="取り崩し開始後のリスク資産ピーク（高値）から、現在のリスク資産評価額が何%下落していたら「下落中」と判定するか。一般的には 10〜20%。" />
         </label>
-        <input id="drawdownThresholdPercent" v-model.number="state.drawdownThresholdPercent" type="number" min="0" max="50" step="1" />
+        <InputNumber id="drawdownThresholdPercent" v-model="state.drawdownThresholdPercent" min="0" max="50" step="1" />
       </div>
       <div class="field checkbox-field">
         <input id="skipRebalanceOnDrawdown" v-model="state.skipRebalanceOnDrawdown" type="checkbox" />
@@ -71,7 +72,7 @@ function onPresetChange(e: Event) {
         リバランス乖離閾値（pt）
         <HelpIcon text="月末の防衛資産比率が目標から何ポイント乖離したらリバランス（売買による比率調整）を行うか。例: 目標30%・閾値5pt なら 25%未満または35%超で発動。0 にすると毎月リバランス。防衛資産配分が 0% のときは無効。課税口座では売却益に課税される点に注意。" />
       </label>
-      <input id="rebalanceThresholdPoint" v-model.number="state.rebalanceThresholdPoint" type="number" min="0" max="50" step="1" />
+      <InputNumber id="rebalanceThresholdPoint" v-model="state.rebalanceThresholdPoint" min="0" max="50" step="1" />
     </div>
   </div>
 </template>

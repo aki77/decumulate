@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import HelpIcon from "./HelpIcon.vue";
+import InputNumber from "./InputNumber.vue";
 import type { ParamsState } from "../composables/useParams.ts";
 import type { OtherIncomeEntry, OtherIncomeAmountMode } from "../../other-income.ts";
 import { computed } from "vue";
@@ -21,7 +22,7 @@ const periodUnit = computed(() => (state.value.currentAge != null ? "歳" : "年
         年金月額（65歳基準, 額面, 万円）
         <HelpIcon text="65歳開始時の額面（税・社会保険控除前）月額。受給開始年齢を変えると繰上げ/繰下げで自動調整される。" />
       </label>
-      <input id="basePension" v-model.number="state.basePensionMan" type="number" min="0" step="1" />
+      <InputNumber id="basePension" v-model="state.basePensionMan" min="0" step="1" />
       <div class="preset-buttons">
         <button type="button" @click="state.basePensionMan = 0">なし</button>
         <button type="button" @click="state.basePensionMan = 15">独身 (15万円)</button>
@@ -33,7 +34,7 @@ const periodUnit = computed(() => (state.value.currentAge != null ? "歳" : "年
         受給開始年齢（60–75）
         <HelpIcon text="繰上げ：60〜64歳は1ヶ月あたり-0.4%。繰下げ：66〜75歳は1ヶ月あたり+0.7% で年金月額が調整される。" />
       </label>
-      <input id="pensionStartAge" v-model.number="state.pensionStartAge" type="number" min="60" max="75" step="1" />
+      <InputNumber id="pensionStartAge" v-model="state.pensionStartAge" min="60" max="75" step="1" />
     </div>
     <div class="field field--full other-incomes-field">
       <div class="other-incomes-header">
@@ -54,14 +55,13 @@ const periodUnit = computed(() => (state.value.currentAge != null ? "歳" : "年
             @input="entry.label = ($event.target as HTMLInputElement).value"
           />
           <div class="oi-controls">
-            <input
+            <InputNumber
               class="oi-amount"
-              type="number"
               min="0"
               step="1"
               placeholder="金額(万円)"
-              :value="entry.amountMan === 0 ? '' : entry.amountMan"
-              @input="entry.amountMan = Number(($event.target as HTMLInputElement).value) || 0"
+              :model-value="entry.amountMan || null"
+              @update:model-value="entry.amountMan = $event ?? 0"
             />
             <select
               class="oi-mode"
@@ -74,24 +74,20 @@ const periodUnit = computed(() => (state.value.currentAge != null ? "歳" : "年
             <button type="button" class="oi-remove" aria-label="削除" @click="emit('removeOtherIncome', entry.id)">×</button>
           </div>
           <div class="oi-period-row">
-            <input
+            <InputNumber
               class="oi-start"
-              type="number"
               min="0"
               step="1"
               :placeholder="`開始(${periodUnit})`"
-              :value="entry.startAge ?? ''"
-              @input="entry.startAge = ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value)"
+              v-model="entry.startAge"
             />
             <span class="oi-period-sep">〜</span>
-            <input
+            <InputNumber
               class="oi-end"
-              type="number"
               min="0"
               step="1"
               :placeholder="`終了(${periodUnit})`"
-              :value="entry.endAge ?? ''"
-              @input="entry.endAge = ($event.target as HTMLInputElement).value === '' ? null : Number(($event.target as HTMLInputElement).value)"
+              v-model="entry.endAge"
             />
           </div>
         </div>
