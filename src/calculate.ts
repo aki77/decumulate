@@ -520,7 +520,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
       const annualForTransfer = Math.max(0, nisaAnnualLimit - contributionThisYear);
       const lifetimeRemain = Math.max(0, nisaLifetimeLimit - lifetimeNisaUsed);
       const targetProceeds = Math.min(annualForTransfer, lifetimeRemain);
-      if (targetProceeds > 0 && taxableRiskTotal > 0) {
+      if (targetProceeds >= 1 && taxableRiskTotal > 0) { // 浮動小数誤差で枠到達後に極小正値が残るケースを除外
         const r = executeNisaTransfer(
           taxableRiskTotal,
           taxableRiskPrincipal,

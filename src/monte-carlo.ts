@@ -387,7 +387,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
       for (let i = 0; i < N; i++) {
         const lifetimeRemain = Math.max(0, nisaLifetimeLimit - lifetimeNisaUsed[i]!);
         const targetProceeds = Math.min(annualForTransfer, lifetimeRemain);
-        if (targetProceeds <= 0 || taxablePaths[i]! <= 0) continue;
+        if (targetProceeds < 1 || taxablePaths[i]! <= 0) continue; // 浮動小数誤差で枠到達後に極小正値が残るケースを除外
         const r = executeNisaTransfer(
           taxablePaths[i]!,
           taxableCostBasis[i]!,
