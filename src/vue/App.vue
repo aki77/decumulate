@@ -22,10 +22,12 @@ const openBtnEl = useTemplateRef<HTMLButtonElement>("openBtnEl");
 
 function openDrawer() {
   drawerOpen.value = true;
+  document.body.style.overflow = 'hidden';
 }
 
 async function closeDrawer() {
   drawerOpen.value = false;
+  document.body.style.overflow = '';
   await nextTick();
   openBtnEl.value?.focus();
 }
@@ -113,6 +115,10 @@ function handleReset() {
 
 <style scoped>
 .page-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
   padding: 24px 24px 8px;
   max-width: 1400px;
   margin: 0 auto;
