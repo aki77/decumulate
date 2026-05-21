@@ -89,13 +89,13 @@ function handleExport() {
             :mc="result.mc"
             :params="debouncedMcParams"
           />
-          <CompoundChart :projections="result.yearly" :params="debouncedMcParams" />
-          <MonteCarloChart :mc="result.mc" :params="debouncedMcParams" />
           <MetricsDetail
             :yearly="result.yearly"
             :mc="result.mc"
             :params="debouncedMcParams"
           />
+          <CompoundChart :projections="result.yearly" :params="debouncedMcParams" />
+          <MonteCarloChart :mc="result.mc" :params="debouncedMcParams" />
           <MonthlyDetails :det-monthly="result.monthly" :mc="result.mc" :params="debouncedMcParams" />
         </template>
         <p v-else class="chart-note">計算中…</p>

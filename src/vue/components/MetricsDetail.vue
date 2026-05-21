@@ -17,7 +17,6 @@ const HELP = {
   mcP90: "最終資産分布の上位 10% タイル。上振れシナリオの目安。",
   finalNisa: "シミュレーション最終年のNISA口座残高（時価, 名目値）。NISAは非課税のため、取り崩しを最後に回すと有利。",
   nisaUsage: "NISA生涯枠（1人1800万 / 夫婦3600万）のうち、買付額ベースで何%を使ったか。",
-  idecoTotal: "シミュレーション最終年のiDeCo残高（時価, 名目値）。受取開始後は減少していく。",
   idecoLumpSum:
     "受取開始月に一時金として受け取った税引後合計（特定リスクに移管済み）。退職所得控除は iDeCo の拠出年数で計算しており、退職金との受給間隔ルール（2026年改正で 5年→10年、退職金先行は 19年）は厳密にはモデル化していない。退職金を別途受給する会社員の場合、実際の税額はこれより高くなる可能性がある。",
   idecoPension:
@@ -34,8 +33,8 @@ const metrics = useMetrics(() => props.yearly, () => props.params);
 </script>
 
 <template>
-  <details class="metrics-detail">
-    <summary>詳細メトリクス</summary>
+  <section class="metrics-detail">
+    <div class="metrics-detail-label">詳細メトリクス</div>
     <div class="metric-grid">
       <div class="metric">
         <div class="metric-label">積立元本合計<HelpIcon :text="HELP.totalContrib" /></div>
@@ -48,10 +47,6 @@ const metrics = useMetrics(() => props.yearly, () => props.params);
       <div class="metric">
         <div class="metric-label">NISA 生涯枠使用率<HelpIcon :text="HELP.nisaUsage" /></div>
         <div class="metric-value">{{ formatPercent(metrics.nisaLifetimeUsageRatio) }}</div>
-      </div>
-      <div class="metric">
-        <div class="metric-label">最終 iDeCo 残高<HelpIcon :text="HELP.idecoTotal" /></div>
-        <div class="metric-value">{{ formatMan(metrics.last.idecoTotal) }}</div>
       </div>
       <div class="metric">
         <div class="metric-label">iDeCo 一時金累計<HelpIcon :text="HELP.idecoLumpSum" /></div>
@@ -82,31 +77,21 @@ const metrics = useMetrics(() => props.yearly, () => props.params);
         <div class="metric-value">{{ formatPercent(mc.maxDrawdownP10) }}</div>
       </div>
     </div>
-  </details>
+  </section>
 </template>
 
 <style scoped>
 .metrics-detail {
   margin-bottom: 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  opacity: 0.92;
 }
 
-.metrics-detail > summary {
-  cursor: pointer;
-  padding: 10px 14px;
-  font-size: 13px;
+.metrics-detail-label {
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
-  user-select: none;
-}
-
-.metrics-detail[open] > summary {
-  border-bottom: 1px solid var(--border);
-}
-
-.metrics-detail .metric-grid {
-  padding: 12px 14px;
+  margin-bottom: 8px;
 }
 </style>
