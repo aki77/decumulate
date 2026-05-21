@@ -676,3 +676,39 @@ test("simulateMonteCarlo - pivot 月次の monthlyWithdrawal は内訳3バケッ
     }
   }
 });
+
+test("simulateMonteCarlo - maxDrawdown は [0,1] 範囲かつ p10 ≤ p50 ≤ p90 の順（ソート昇順）", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    withdrawalYears: 10,
+    volatility: 20,
+  };
+  const result = simulateMonteCarlo(params);
+  assert.ok(
+    result.maxDrawdownP10 >= 0 && result.maxDrawdownP10 <= 1,
+    `maxDrawdownP10=${result.maxDrawdownP10} が [0,1] 外`,
+  );
+  assert.ok(
+    result.maxDrawdownP90 >= 0 && result.maxDrawdownP90 <= 1,
+    `maxDrawdownP90=${result.maxDrawdownP90} が [0,1] 外`,
+  );
+  assert.ok(
+    result.maxDrawdownP10 <= result.maxDrawdownP50,
+    `順序違反: p10=${result.maxDrawdownP10} > p50=${result.maxDrawdownP50}`,
+  );
+  assert.ok(
+    result.maxDrawdownP50 <= result.maxDrawdownP90,
+    `順序違反: p50=${result.maxDrawdownP50} > p90=${result.maxDrawdownP90}`,
+  );
+});
+
+test("simulateMonteCarlo - withdrawalYears=0 では maxDrawdown は 0（フォールバック）", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    withdrawalYears: 0,
+  };
+  const result = simulateMonteCarlo(params);
+  assert.strictEqual(result.maxDrawdownP10, 0);
+  assert.strictEqual(result.maxDrawdownP50, 0);
+  assert.strictEqual(result.maxDrawdownP90, 0);
+});

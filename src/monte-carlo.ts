@@ -55,6 +55,9 @@ export interface MonteCarloResult {
   finalP50: number;
   finalP10: number;
   finalP90: number;
+  maxDrawdownP10: number;
+  maxDrawdownP50: number;
+  maxDrawdownP90: number;
   pivotMonthlies: PivotMonthlies;
 }
 
@@ -227,6 +230,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     failureProbability: number;
     finalTotals: Float64Array | null;
     pivotMonthlies: PivotMonthlies;
+    maxDrawdown: { p10: number; p50: number; p90: number } | null;
   } => {
   // ホットループ（N×12×totalYears 回）で O(1) かつ分岐予測しやすい判定にするため、
   // パス index → 該当パーセンタイル の対応を Uint8Array のビットマスクで保持する。
@@ -257,6 +261,11 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
   const useIdeco = idecoEnabled && idecoPaths !== null;
   // 下落判定は「リスクサイド合計」のHWMで判断する
   const riskSideHWM = priorityOnDrawdown ? new Float64Array(N).fill(initialRiskSide) : null;
+  // MaxDD 統計: phase1（全 N パス集計）かつ取り崩し期間ありの時のみ追跡。
+  // 取り崩し開始月以降の total（NISA+特定+防衛+iDeCo）ピークからの最大下落率をパスごとに記録する。
+  const enableMaxDD = pivotIndices === null && withdrawalYears > 0;
+  const totalHWM = enableMaxDD ? new Float64Array(N) : null;
+  const maxDrawdownByPath = enableMaxDD ? new Float64Array(N) : null;
   const cumulativeWithdrawals = new Float64Array(N);
   const rateBasedMonthlyWithdrawal = new Float64Array(N);
   const rateWithdrawalInitialized = new Uint8Array(N);
@@ -547,6 +556,23 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
         }
 
         const total = riskSide + defenseValue;
+
+        if (totalHWM !== null && maxDrawdownByPath !== null) {
+          if (isWithdrawalStartMonth) {
+            totalHWM[i] = total;
+          } else if (isWithdrawing) {
+            let peak = totalHWM[i]!;
+            if (total > peak) {
+              peak = total;
+              totalHWM[i] = total;
+            }
+            if (peak > 0) {
+              const dd = 1 - total / peak;
+              if (dd > maxDrawdownByPath[i]!) maxDrawdownByPath[i] = dd;
+            }
+          }
+        }
+
         const inDrawdown =
           checkDrawdown &&
           riskSideHWM !== null &&
@@ -843,11 +869,19 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     if (finalTotal + cumulativeWithdrawals[i]! < totalContributed) failureCount++;
   }
 
+  let maxDrawdown: { p10: number; p50: number; p90: number } | null = null;
+  if (maxDrawdownByPath !== null) {
+    maxDrawdownByPath.sort();
+    const q = (p: number) => maxDrawdownByPath[Math.min(N - 1, Math.floor(N * p))]!;
+    maxDrawdown = { p10: q(0.1), p50: q(0.5), p90: q(0.9) };
+  }
+
   return {
     yearly,
     failureProbability: failureCount / N,
     finalTotals,
     pivotMonthlies,
+    maxDrawdown,
   };
   };
 
@@ -898,6 +932,9 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     finalP50,
     finalP10: lastYearly.p10,
     finalP90: lastYearly.p90,
+    maxDrawdownP10: phase1.maxDrawdown?.p10 ?? 0,
+    maxDrawdownP50: phase1.maxDrawdown?.p50 ?? 0,
+    maxDrawdownP90: phase1.maxDrawdown?.p90 ?? 0,
     pivotMonthlies: phase2.pivotMonthlies,
   };
 }

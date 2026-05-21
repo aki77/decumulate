@@ -23,6 +23,12 @@ const HELP = {
     "受取開始月に一時金として受け取った税引後合計（特定リスクに移管済み）。退職所得控除は iDeCo の拠出年数で計算しており、退職金との受給間隔ルール（2026年改正で 5年→10年、退職金先行は 19年）は厳密にはモデル化していない。退職金を別途受給する会社員の場合、実際の税額はこれより高くなる可能性がある。",
   idecoPension:
     "iDeCo年金受取の累計（税引後）。月次取り崩しの支出に充当される。公的年金等控除は公的年金とiDeCo年金の合算枠で計算する（2025年改正後の速算表ベース）。",
+  maxDDp50:
+    "取り崩し開始月以降の総資産（NISA + 特定 + 防衛 + iDeCo, 実質）のピークからの最大下落率。N=5000 パスの中央値。心理的耐性 / bond tent 戦略の判断材料に使う。",
+  maxDDp90:
+    "上位 10% タイル（最も深いドローダウン側）。悲観シナリオで耐える必要がある含み損の目安。",
+  maxDDp10:
+    "下位 10% タイル（最も浅いドローダウン側）。順風シナリオでの下落幅。",
 } as const;
 
 const metrics = useMetrics(() => props.yearly, () => props.params);
@@ -67,6 +73,18 @@ const metrics = useMetrics(() => props.yearly, () => props.params);
       <div class="metric">
         <div class="metric-label">MC 楽観値 p90（実質）<HelpIcon :text="HELP.mcP90" /></div>
         <div class="metric-value">{{ formatMan(mc.finalP90) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">最大DD 中央値<HelpIcon :text="HELP.maxDDp50" /></div>
+        <div class="metric-value">{{ formatPercent(mc.maxDrawdownP50) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">最大DD 上位10%（深い）<HelpIcon :text="HELP.maxDDp90" /></div>
+        <div class="metric-value">{{ formatPercent(mc.maxDrawdownP90) }}</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">最大DD 下位10%（浅い）<HelpIcon :text="HELP.maxDDp10" /></div>
+        <div class="metric-value">{{ formatPercent(mc.maxDrawdownP10) }}</div>
       </div>
     </div>
   </details>
