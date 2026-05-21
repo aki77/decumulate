@@ -635,7 +635,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         lifetimeNisaUsed += toNisa;
       }
 
-      const currentTotal = nisaTotal + taxableRiskTotal + defenseTotal;
+      const currentTotal = nisaTotal + taxableRiskTotal + defenseTotal + idecoState.total;
 
       let monthlyWithdrawal = 0;
       let withdrawalFromNisa = 0;

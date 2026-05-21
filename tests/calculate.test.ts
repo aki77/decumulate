@@ -922,6 +922,41 @@ test("calculateCompound (rate) - 下限が資産を超える場合は資産残�
   for (const y of result.yearly) assert.ok(Number.isFinite(y.total));
 });
 
+test("calculateCompound (rate) - iDeCo 残高が基準額に含まれる（MC との整合）", () => {
+  const base: CalculateParams = {
+    ...BASE_PARAMS,
+    ...nisaOnly(10000000),
+    annualReturnRate: 0,
+    expenseRatio: 0,
+    inflationRate: 0,
+    contributionYears: 0,
+    withdrawalStartYear: 0,
+    withdrawalYears: 1,
+    withdrawalMode: "rate",
+    withdrawalRate: 4,
+    currentAge: 60,
+  };
+  const withoutIdeco = calculateCompound(base);
+  const withIdeco = calculateCompound({
+    ...base,
+    idecoEnabled: true,
+    ideco: {
+      ...BASE_PARAMS.ideco,
+      initialIdeco: 5000000,
+      idecoReceiveStartAge: 65,
+    },
+  });
+
+  assert.ok(Math.abs(withoutIdeco.monthly[0]!.rateWithdrawalBasis! - 10000000) < 1);
+  assert.ok(Math.abs(withIdeco.monthly[0]!.rateWithdrawalBasis! - 15000000) < 1);
+  assert.ok(
+    Math.abs(
+      withIdeco.yearly[1]!.yearlyWithdrawal -
+        withoutIdeco.yearly[1]!.yearlyWithdrawal * 1.5,
+    ) < 1000,
+  );
+});
+
 // --- otherIncomes (期間付き複数件) ---
 
 test("calculateCompound (otherIncomes) - 単一件・期間内で年合計に反映", () => {
