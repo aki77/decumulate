@@ -66,7 +66,7 @@ function handleExport() {
   <div style="display: contents">
     <header class="page-header">
       <div class="page-header-top">
-        <h1>資産切り崩しシミュレーター</h1>
+        <h1>積立・取り崩しシミュレーター</h1>
         <button ref="openBtnEl" type="button" class="drawer-trigger" @click="openDrawer">入力…</button>
       </div>
       <p class="subtitle">
