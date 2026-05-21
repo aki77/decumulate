@@ -60,7 +60,7 @@ function handleReset() {
         <button ref="openBtnEl" type="button" class="drawer-trigger" @click="openDrawer">入力…</button>
       </div>
       <p class="subtitle">
-        積立 → 取り崩しの資産推移をモンテカルロで評価します。すべての計算はブラウザ内で完結し、データは外部送信されません。
+        NISA・特定口座・防衛資産の3バケットを日本の税制に沿って管理。iDeCo・公的年金も含め、取り崩し戦略をモンテカルロ（5,000パス）と年次／月次テーブルで詳しく検証できます。すべての計算はブラウザ内で完結し、データは外部送信されません。
       </p>
     </header>
 
