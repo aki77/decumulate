@@ -156,6 +156,9 @@ export function simulateMonteCarlo(
     nisaInitialLifetimeUsed,
     idecoEnabled,
     ideco,
+    guardrailUpperPercent,
+    guardrailLowerPercent,
+    guardrailAdjustmentPercent,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
@@ -190,7 +193,12 @@ export function simulateMonteCarlo(
 
   const isRateMode = withdrawalMode === "rate";
   const isRateRiskMode = withdrawalMode === "rate-risk";
-  const isAnyRateMode = isRateMode || isRateRiskMode;
+  const isGuardrailMode = withdrawalMode === "rate-guardrail";
+  const isAnyRateMode = isRateMode || isRateRiskMode || isGuardrailMode;
+  const guardrailUpper = isGuardrailMode ? (withdrawalRate / 100) * (1 + guardrailUpperPercent / 100) : 0;
+  const guardrailLower = isGuardrailMode ? (withdrawalRate / 100) * (1 - guardrailLowerPercent / 100) : 0;
+  const guardrailAdjUp = isGuardrailMode ? 1 + guardrailAdjustmentPercent / 100 : 1;
+  const guardrailAdjDn = isGuardrailMode ? 1 - guardrailAdjustmentPercent / 100 : 1;
 
   // MC は内部が実質値計算。入力値（今日の購買力）をそのまま全期間の実質閾値に使う（決定論版とは違いインフレ進行させない）。
   // ホットループ内の分岐を避けるため、年インデックス → floor/ceiling の Float64Array を事前展開する。
@@ -376,8 +384,8 @@ export function simulateMonteCarlo(
       monthlyWithdrawalTaxDefense: Math.round(raw.monthlyWithdrawalTaxDefense),
       baseWithdrawal: Math.round(raw.monthlyWithdrawal),
       rateWithdrawalBasis:
-        raw.month === 1 && (isRateMode || isRateRiskMode)
-          ? isRateRiskMode
+        raw.month === 1 && (isRateMode || isRateRiskMode || isGuardrailMode)
+          ? isRateRiskMode || isGuardrailMode
             ? Math.round(raw.prevNisa + raw.prevTaxable + raw.prevIdeco)
             : Math.round(raw.prevNisa + raw.prevTaxable + raw.prevDefense + raw.prevIdeco)
           : null,
@@ -470,12 +478,25 @@ export function simulateMonteCarlo(
       }
     }
 
-    // rate モードでは年頭にインフレ調整。決定論と挙動を揃える。
-    if (isWithdrawing && isRateMode) {
+    if (isWithdrawing && (isRateMode || isGuardrailMode)) {
       for (let i = 0; i < N; i++) {
         if (rateWithdrawalInitialized[i] && ri > 0) {
           rateBasedMonthlyWithdrawal[i]! *= 1 + ri;
         }
+      }
+    }
+
+    if (isWithdrawing && isGuardrailMode) {
+      for (let i = 0; i < N; i++) {
+        if (!rateWithdrawalInitialized[i]) continue;
+        const riskSide =
+          nisaPaths[i]! +
+          taxablePaths[i]! +
+          (useIdeco ? idecoPaths![i]! : 0);
+        if (riskSide <= 0) continue;
+        const currentRate = (rateBasedMonthlyWithdrawal[i]! * 12) / riskSide;
+        if (currentRate > guardrailUpper) rateBasedMonthlyWithdrawal[i]! *= guardrailAdjDn;
+        else if (currentRate < guardrailLower) rateBasedMonthlyWithdrawal[i]! *= guardrailAdjUp;
       }
     }
 
@@ -642,6 +663,12 @@ export function simulateMonteCarlo(
           } else if (isRateRiskMode) {
             if (m === 0) {
               rateBasedMonthlyWithdrawal[i] = (riskSide * withdrawalRate) / 100 / 12;
+            }
+            baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
+          } else if (isGuardrailMode) {
+            if (!rateWithdrawalInitialized[i]) {
+              rateBasedMonthlyWithdrawal[i] = (riskSide * withdrawalRate) / 100 / 12;
+              rateWithdrawalInitialized[i] = 1;
             }
             baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
           } else {

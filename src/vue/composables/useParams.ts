@@ -5,7 +5,7 @@ import type { WithdrawalLimitStep } from "../../calculate.ts";
 import type { MonteCarloParams } from "../../monte-carlo.ts";
 import { findSafeWithdrawalRate, type SwrSearchResult } from "../../swr.ts";
 
-export type WithdrawalMode = "amount" | "rate" | "rate-risk";
+export type WithdrawalMode = "amount" | "rate" | "rate-risk" | "rate-guardrail";
 
 // UI 入力用の年齢ステップ。万円・年齢入力。末尾の 1 行は untilAge=null（「以降」）。
 export interface WithdrawalLimitStepInput {
@@ -88,6 +88,9 @@ export interface ParamsState {
   idecoReceiveStartAge: number;
   idecoLumpSumRatio: number;
   idecoPensionYears: number;
+  guardrailUpperPercent: number;
+  guardrailLowerPercent: number;
+  guardrailAdjustmentPercent: number;
   otherIncomes: OtherIncomeEntry[];
 }
 
@@ -155,6 +158,9 @@ export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes" | "withdrawalLimit
   idecoReceiveStartAge: 65,
   idecoLumpSumRatio: 100,
   idecoPensionYears: 10,
+  guardrailUpperPercent: 20,
+  guardrailLowerPercent: 20,
+  guardrailAdjustmentPercent: 10,
   otherIncomes: [],
 };
 
@@ -228,6 +234,9 @@ export function useParams() {
       drawdownThresholdPercent: state.drawdownThresholdPercent,
       rebalanceThresholdPoint: state.rebalanceThresholdPoint,
       skipRebalanceOnDrawdown: state.skipRebalanceOnDrawdown,
+      guardrailUpperPercent: state.guardrailUpperPercent,
+      guardrailLowerPercent: state.guardrailLowerPercent,
+      guardrailAdjustmentPercent: state.guardrailAdjustmentPercent,
       idecoEnabled: state.idecoEnabled,
       ideco: {
         initialIdeco: state.initialIdecoMan * MAN,

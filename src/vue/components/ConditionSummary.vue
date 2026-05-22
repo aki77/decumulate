@@ -13,6 +13,8 @@ const withdrawalLabel = computed((): string => {
       return `定率 ${props.state.withdrawalRate}%`;
     case "rate-risk":
       return `定率×リスク ${props.state.withdrawalRate}%`;
+    case "rate-guardrail":
+      return `GKガードレール ${props.state.withdrawalRate}%`;
   }
 });
 </script>

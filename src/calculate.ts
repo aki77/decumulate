@@ -39,9 +39,12 @@ export interface CalculateParams {
   withdrawalYears: number;
 
   // 取り崩し
-  withdrawalMode: "amount" | "rate" | "rate-risk";
+  withdrawalMode: "amount" | "rate" | "rate-risk" | "rate-guardrail";
   fixedMonthlyWithdrawal: number;
   withdrawalRate: number;
+  guardrailUpperPercent: number;
+  guardrailLowerPercent: number;
+  guardrailAdjustmentPercent: number;
   // 年率モード時の月額下限/上限。年齢ステップ式。各行 untilAge までその floor/ceiling を採用、
   // 末尾行は untilAge=null（以降ずっと）。値は円・実質値（呼び出し側で名目化）。
   withdrawalLimitSchedule: WithdrawalLimitStep[];
@@ -470,6 +473,9 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     nisaInitialLifetimeUsed,
     idecoEnabled,
     ideco,
+    guardrailUpperPercent,
+    guardrailLowerPercent,
+    guardrailAdjustmentPercent,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
@@ -511,7 +517,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
   let currentMonthlyWithdrawal = fixedMonthlyWithdrawal;
   let rateBasedMonthlyWithdrawal = 0;
   let rateWithdrawalBasis: number | null = null;
-  const isAnyRateMode = withdrawalMode === "rate" || withdrawalMode === "rate-risk";
+  const isGuardrailMode = withdrawalMode === "rate-guardrail";
+  const isAnyRateMode = withdrawalMode === "rate" || withdrawalMode === "rate-risk" || isGuardrailMode;
   // 決定論版は名目値計算のため、年率モードの下限/上限を毎年初に *=(1+ri) して実質購買力を一定に保つ。
   // schedule は実質値で受け取り、ローカルに名目コピーを保持して年初に名目化する。
   const nominalLimitSchedule: WithdrawalLimitStep[] = withdrawalLimitSchedule.map((s) => ({
@@ -689,6 +696,27 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         } else if (withdrawalMode === "rate-risk") {
           if (m === 0) {
             rateBasedMonthlyWithdrawal = (riskSideForRate * withdrawalRate) / 100 / 12;
+            rateWithdrawalBasis = Math.round(riskSideForRate);
+          }
+          baseWithdrawal = rateBasedMonthlyWithdrawal;
+        } else if (isGuardrailMode) {
+          if (m === 0) {
+            if (year === withdrawalStartYear + 1) {
+              rateBasedMonthlyWithdrawal = (riskSideForRate * withdrawalRate) / 100 / 12;
+            } else {
+              rateBasedMonthlyWithdrawal *= 1 + ri;
+              if (riskSideForRate > 0) {
+                const initialRateDec = withdrawalRate / 100;
+                const currentAnnualRate = (rateBasedMonthlyWithdrawal * 12) / riskSideForRate;
+                const upperBound = initialRateDec * (1 + guardrailUpperPercent / 100);
+                const lowerBound = initialRateDec * (1 - guardrailLowerPercent / 100);
+                if (currentAnnualRate > upperBound) {
+                  rateBasedMonthlyWithdrawal *= 1 - guardrailAdjustmentPercent / 100;
+                } else if (currentAnnualRate < lowerBound) {
+                  rateBasedMonthlyWithdrawal *= 1 + guardrailAdjustmentPercent / 100;
+                }
+              }
+            }
             rateWithdrawalBasis = Math.round(riskSideForRate);
           }
           baseWithdrawal = rateBasedMonthlyWithdrawal;

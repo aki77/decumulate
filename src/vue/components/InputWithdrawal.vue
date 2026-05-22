@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import HelpIcon from "./HelpIcon.vue";
 import InputNumber from "./InputNumber.vue";
-import type { ParamsState, WithdrawalMode } from "../composables/useParams.ts";
+import type { ParamsState } from "../composables/useParams.ts";
 
 const state = defineModel<ParamsState>({ required: true });
 
@@ -17,8 +17,12 @@ defineEmits<{
 }>();
 
 const isRateMode = computed(
-  () => state.value.withdrawalMode === "rate" || state.value.withdrawalMode === "rate-risk",
+  () =>
+    state.value.withdrawalMode === "rate" ||
+    state.value.withdrawalMode === "rate-risk" ||
+    state.value.withdrawalMode === "rate-guardrail",
 );
+const isGuardrailMode = computed(() => state.value.withdrawalMode === "rate-guardrail");
 </script>
 
 <template>
@@ -27,12 +31,13 @@ const isRateMode = computed(
     <div class="field field--full">
       <label for="withdrawalMode">
         取り崩しモード
-        <HelpIcon text="「月額」は毎月一定額を引き出す方式。「年率（Trinity Study）」は初年度資産にかかる%を毎年インフレ調整。「年率×リスク資産」は毎年初にその時点のリスク資産に率をかけて月額を再計算（資産変動に追従、インフレ調整なし）。" />
+        <HelpIcon text="「月額」は毎月一定額を引き出す方式。「年率（Trinity Study）」は初年度資産にかかる%を毎年インフレ調整。「年率×リスク資産」は毎年初にその時点のリスク資産に率をかけて月額を再計算（資産変動に追従、インフレ調整なし）。「Guyton-Klinger」は毎年インフレ調整した上で、当年の引出率が初期率の±20%を超えたら引出額を±10%調整する（固定%より枯渇を抑え、固定額より生活水準を維持）。" />
       </label>
       <select id="withdrawalMode" v-model="state.withdrawalMode">
         <option value="amount">月額で指定</option>
         <option value="rate">年率（%）で指定（Trinity Study）</option>
         <option value="rate-risk">年率（%）×リスク資産で毎年再評価</option>
+        <option value="rate-guardrail">年率（%）Guyton-Klinger ガードレール</option>
       </select>
     </div>
     <div v-if="!isRateMode" class="field">
@@ -57,10 +62,36 @@ const isRateMode = computed(
           </button>
         </div>
       </div>
+      <details v-if="isGuardrailMode" class="guardrail-details">
+        <summary>ガードレール詳細設定</summary>
+        <div class="guardrail-fields">
+          <div class="field">
+            <label for="guardrailUpperPercent">
+              上ガードレール（%）
+              <HelpIcon text="引出率が初期引出率の この%分を超えたら、引出額を調整幅だけ削減する。既定 20%。" />
+            </label>
+            <InputNumber id="guardrailUpperPercent" v-model="state.guardrailUpperPercent" min="1" max="100" step="1" />
+          </div>
+          <div class="field">
+            <label for="guardrailLowerPercent">
+              下ガードレール（%）
+              <HelpIcon text="引出率が初期引出率の この%分を下回ったら、引出額を調整幅だけ増加する。既定 20%。" />
+            </label>
+            <InputNumber id="guardrailLowerPercent" v-model="state.guardrailLowerPercent" min="1" max="100" step="1" />
+          </div>
+          <div class="field">
+            <label for="guardrailAdjustmentPercent">
+              調整幅（%）
+              <HelpIcon text="ガードレール抵触時に引出額を増減する割合。既定 10%。" />
+            </label>
+            <InputNumber id="guardrailAdjustmentPercent" v-model="state.guardrailAdjustmentPercent" min="1" max="50" step="1" />
+          </div>
+        </div>
+      </details>
       <div class="field field--full">
         <label>
           月額下限・上限（年齢ステップ式）
-          <HelpIcon text="年齢に応じて月額下限・上限を段階的に変えられます。各行の「〜歳まで」までその区間の下限・上限を適用、最後の行は「以降ずっと」。値は「現在の購買力（万円）」で、シミュレーション内では自動でインフレ名目化されます。空欄は無制限。下限>上限のときは上限が優先されます。" />
+          <HelpIcon text="年齢に応じて月額下限・上限を段階的に変えられます。各行の「〜歳まで」までその区間の下限・上限を適用、最後の行は「以降ずっと」。値は「現在の購買力（万円）」で、シミュレーション内では自動でインフレ名目化されます。空欄は無制限。下限>上限のときは上限が優先されます。Guyton-Klinger モードでは GK 調整後の引出額をさらにこの下限・上限で挟むため、「最低限この金額は引き出す／この金額以上は引き出さない」という生活費の安全網として活用できます。" />
         </label>
         <table class="limit-table">
           <thead>
@@ -166,6 +197,27 @@ const isRateMode = computed(
 .limit-add:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.guardrail-details {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
+.guardrail-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  user-select: none;
+}
+
+.guardrail-fields {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .rate-with-button {

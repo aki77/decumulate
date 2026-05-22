@@ -63,6 +63,9 @@ const BASE_PARAMS: MonteCarloParams = {
     idecoLumpSumRatio: 1,
     idecoPensionYears: 10,
   },
+  guardrailUpperPercent: 20,
+  guardrailLowerPercent: 20,
+  guardrailAdjustmentPercent: 10,
 };
 
 // initialAmount + defenseRatio(%) を新シグネチャに変換するヘルパ。
@@ -810,4 +813,25 @@ test("simulateMonteCarlo - withdrawalYears=0 では sequenceP10Monthly は空で
   const result = simulateMonteCarlo(params);
   assert.strictEqual(result.sequenceP10Monthly.length, 0);
   assert.strictEqual(result.sequenceRiskDepletionAge, null);
+});
+
+test("simulateMonteCarlo - rate-guardrail: depletionProbability が rate モードと比較して同等以下", () => {
+  const common: Partial<MonteCarloParams> = {
+    ...withBuckets(10_000_000),
+    withdrawalRate: 4,
+    withdrawalYears: 30,
+    volatility: 15,
+    inflationRate: 2,
+    withdrawalLimitSchedule: [{ untilAge: null, floor: null, ceiling: null }],
+    guardrailUpperPercent: 20,
+    guardrailLowerPercent: 20,
+    guardrailAdjustmentPercent: 10,
+  };
+  const rateResult = simulateMonteCarlo({ ...BASE_PARAMS, ...common, withdrawalMode: "rate" }, SEED);
+  const guardrailResult = simulateMonteCarlo({ ...BASE_PARAMS, ...common, withdrawalMode: "rate-guardrail" }, SEED);
+  // ガードレールモードは rate より枯渇率が同等か低くなるはず（GKの特性）
+  assert.ok(
+    guardrailResult.depletionProbability <= rateResult.depletionProbability + 0.05,
+    `guardrail depletionProbability ${guardrailResult.depletionProbability} > rate ${rateResult.depletionProbability} + 0.05`,
+  );
 });
