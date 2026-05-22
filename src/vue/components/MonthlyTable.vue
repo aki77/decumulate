@@ -15,6 +15,19 @@ function formatMonthlyGain(yen: number): string {
   return `${sign}${formatMan(yen)}`;
 }
 
+// 防衛資産の月次損益は通常 1万円未満で、formatMan の整数丸めでは "0万円" に潰れて情報が失われる。
+// 絶対値が 1万円未満のときだけ小数 1 桁で表示する。
+function formatMonthlyGainFine(yen: number): string {
+  if (!Number.isFinite(yen)) return "-";
+  const man = toMan(yen);
+  if (Math.abs(man) < 1) {
+    const rounded = Math.round(man * 10) / 10;
+    if (rounded === 0) return "0.0万円";
+    return `${rounded > 0 ? "+" : ""}${rounded.toFixed(1)}万円`;
+  }
+  return formatMonthlyGain(yen);
+}
+
 type RateBand = "pos-strong" | "pos" | "flat" | "neg" | "neg-strong";
 
 function classifyRateBand(rate: number, isAnnual: boolean): RateBand {
@@ -202,7 +215,7 @@ const yearGroups = computed<YearGroup[]>(() => {
               {{ formatMan(row.src.defenseTotal) }}
               <span v-if="row.src.total > 0" class="cell-sub">({{ formatPercent(row.src.defenseTotal / row.src.total) }})</span>
             </td>
-            <td :class="row.src.monthlyGainDefense < 0 ? 'neg' : ''">{{ formatMonthlyGain(row.src.monthlyGainDefense) }}</td>
+            <td :class="row.src.monthlyGainDefense < 0 ? 'neg' : ''">{{ formatMonthlyGainFine(row.src.monthlyGainDefense) }}</td>
             <td>{{ formatMan(row.src.total) }}</td>
             <td>
               {{ formatMan(row.src.monthlyWithdrawal) }}
