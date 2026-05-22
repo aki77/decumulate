@@ -72,8 +72,10 @@ interface YearGroup {
 const showIdeco = computed(() => props.params.idecoEnabled);
 const riskColspan = computed(() => showIdeco.value ? 5 : 4);
 
+// TODO: HelpIcon の slot 化に合わせて Vue テンプレで組み立てる形にリファクタ
 function buildRiskBreakdownHtml(r: MonthlyProjection): string {
   const lines = [
+    "リスク資産の月次運用損益（取り崩し・リバランス・積立は含まない）",
     `NISA: ${formatMonthlyGain(r.monthlyGainNisa)}`,
     `特定リスク: ${formatMonthlyGain(r.monthlyGainTaxableRisk)}`,
   ];
@@ -86,6 +88,7 @@ function buildRiskBreakdownHtml(r: MonthlyProjection): string {
   return lines.join("<br>");
 }
 
+// TODO: HelpIcon の slot 化に合わせて Vue テンプレで組み立てる形にリファクタ
 function buildWithdrawalBreakdownHtml(r: MonthlyProjection): string {
   const lines: string[] = [];
   if (r.monthlyWithdrawalTaxableRisk > 0) {
@@ -233,7 +236,13 @@ const yearGroups = computed<YearGroup[]>(() => {
               {{ formatMan(row.src.defenseTotal) }}
               <span v-if="row.src.total > 0" class="cell-sub">({{ formatPercent(row.src.defenseTotal / row.src.total) }})</span>
             </td>
-            <td :class="row.src.monthlyGainDefense < 0 ? 'neg' : ''">{{ formatMonthlyGainFine(row.src.monthlyGainDefense) }}</td>
+            <td :class="row.src.monthlyGainDefense < 0 ? 'neg' : ''">
+              {{ formatMonthlyGainFine(row.src.monthlyGainDefense) }}
+              <HelpIcon
+                v-if="row.src.monthlyWithdrawalDefense > 0 || row.src.rebalanceInfo"
+                ariaLabel="防衛損益内訳"
+              >防衛資産の月次運用損益（取り崩し・リバランスは含まない）<br>運用損益: {{ formatMonthlyGain(row.src.monthlyGainDefense) }}<template v-if="row.src.monthlyWithdrawalDefense > 0"><br>取り崩し: -{{ formatMan(row.src.monthlyWithdrawalDefense) }}<template v-if="row.src.monthlyWithdrawalTaxDefense > 0"> (税 {{ formatMan(row.src.monthlyWithdrawalTaxDefense) }})</template></template><template v-if="row.src.rebalanceInfo"><br><template v-if="row.src.rebalanceInfo.direction === 'risk-to-defense'">リバランス買付: +{{ formatMan(row.src.rebalanceInfo.proceeds) }}</template><template v-else>リバランス売却: -{{ formatMan(row.src.rebalanceInfo.sellAmount) }} (税 {{ formatMan(row.src.rebalanceInfo.taxAmount) }})</template></template></HelpIcon>
+            </td>
             <td>{{ formatMan(row.src.total) }}</td>
             <td>
               {{ formatMan(row.src.monthlyWithdrawal) }}
@@ -246,6 +255,7 @@ const yearGroups = computed<YearGroup[]>(() => {
             <td>{{ formatMan(row.src.monthlyPension) }}</td>
             <td>{{ formatMan(row.src.monthlyOtherIncome) }}</td>
             <td class="monthly-rate" :data-rate-band="classifyRateBand(row.src.monthlyRate, false)">{{ formatRate(row.src.monthlyRate) }}</td>
+            <!-- TODO: .event-tip 内の v-html による文字列連結を slot ベースの Vue テンプレに置き換え -->
             <td>
               <template v-if="row.src.nisaTransferInfo">
                 <span class="event-badge" data-kind="transfer" tabindex="0" aria-label="NISA振替">▲<span class="event-tip" v-html="`特定 → NISA 振替<br>売却額 ${formatMan(row.src.nisaTransferInfo.sellAmount)}<br>税額 ${formatMan(row.src.nisaTransferInfo.taxAmount)}<br>NISA買付 ${formatMan(row.src.nisaTransferInfo.proceeds)}`"></span></span>

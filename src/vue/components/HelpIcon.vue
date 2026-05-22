@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useId } from "vue";
 
-defineProps<{ text: string; ariaLabel?: string; compact?: boolean }>();
+defineProps<{ text?: string; ariaLabel?: string; compact?: boolean }>();
 const anchorName = `--help-${useId()}`;
 </script>
 
@@ -12,7 +12,7 @@ const anchorName = `--help-${useId()}`;
     :style="{ anchorName }"
     tabindex="0"
     :aria-label="ariaLabel ?? 'ヘルプ'"
-  >?<span class="help-tip" :style="{ positionAnchor: anchorName }" v-html="text"></span></span>
+  >?<span class="help-tip" :style="{ positionAnchor: anchorName }"><slot><span v-html="text"></span></slot></span></span>
 </template>
 
 <style scoped>
