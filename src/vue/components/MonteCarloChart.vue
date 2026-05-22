@@ -3,7 +3,7 @@ import { ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { Chart } from "chart.js";
 import { ensureChartRegistered } from "../composables/useChartJs.ts";
 import { toMan, formatManValue } from "../format.ts";
-import { NUM_SIMULATIONS, SEED } from "../../monte-carlo.ts";
+import { NUM_SIMULATIONS } from "../../monte-carlo.ts";
 import type { MonteCarloResult, MonteCarloParams } from "../../monte-carlo.ts";
 
 ensureChartRegistered();
@@ -20,7 +20,7 @@ async function copyDebugJson(): Promise<void> {
   const payload = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
-    seed: SEED,
+    seed: mc.seed,
     numSimulations: NUM_SIMULATIONS,
     params: JSON.parse(JSON.stringify(params)) as MonteCarloParams,
     summary: {

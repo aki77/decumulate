@@ -73,6 +73,7 @@ export interface MonteCarloResult {
   sequenceP10Monthly: MonthlyProjection[];
   sequenceRiskDepletionAge: number | null;
   sequenceP10Diagnostics: SequenceP10Diagnostics | null;
+  seed: number;
 }
 
 export interface SecurityScoreInput {
@@ -112,7 +113,10 @@ function normalRandom(rng: () => number): number {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
+export function simulateMonteCarlo(
+  params: MonteCarloParams,
+  seed: number = Math.floor(Math.random() * 0x100000000),
+): MonteCarloResult {
   const {
     initialNisa,
     initialNisaGain,
@@ -277,7 +281,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     }
     return out;
   };
-  const rng = mulberry32(SEED);
+  const rng = mulberry32(seed);
   const nisaPaths = new Float64Array(N).fill(initialNisa);
   const nisaCostBasis = new Float64Array(N).fill(initialNisaPrincipalValue);
   const taxablePaths = new Float64Array(N).fill(initialTaxableRisk);
@@ -1036,6 +1040,7 @@ export function simulateMonteCarlo(params: MonteCarloParams): MonteCarloResult {
     sequenceP10Monthly: phase2.sequenceP10Monthly,
     sequenceRiskDepletionAge,
     sequenceP10Diagnostics,
+    seed,
   };
 }
 

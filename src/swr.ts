@@ -2,6 +2,7 @@ import { simulateMonteCarlo, type MonteCarloParams } from "./monte-carlo.ts";
 
 export interface SwrSearchOptions {
   targetSuccessRate?: number;
+  seed?: number;
 }
 
 export interface SwrSearchResult {
@@ -15,8 +16,8 @@ const MAX_RATE = 10.0;
 const ITERATIONS = 7;
 const DEFAULT_TARGET_SUCCESS_RATE = 0.95;
 
-function successRateAt(params: MonteCarloParams, rate: number): number {
-  const result = simulateMonteCarlo({ ...params, withdrawalRate: rate });
+function successRateAt(params: MonteCarloParams, rate: number, seed?: number): number {
+  const result = simulateMonteCarlo({ ...params, withdrawalRate: rate }, seed);
   return 1 - result.depletionProbability;
 }
 
@@ -29,13 +30,14 @@ export function findSafeWithdrawalRate(
   options?: SwrSearchOptions,
 ): SwrSearchResult {
   const target = options?.targetSuccessRate ?? DEFAULT_TARGET_SUCCESS_RATE;
+  const seed = options?.seed ?? Math.floor(Math.random() * 0x100000000);
 
-  const successAtMin = successRateAt(params, MIN_RATE);
+  const successAtMin = successRateAt(params, MIN_RATE, seed);
   if (successAtMin < target) {
     return { rate: roundRate(MIN_RATE), successRate: successAtMin, boundary: "below-min" };
   }
 
-  const successAtMax = successRateAt(params, MAX_RATE);
+  const successAtMax = successRateAt(params, MAX_RATE, seed);
   if (successAtMax >= target) {
     return { rate: roundRate(MAX_RATE), successRate: successAtMax, boundary: "above-max" };
   }
@@ -45,7 +47,7 @@ export function findSafeWithdrawalRate(
   let loSuccess = successAtMin;
   for (let i = 0; i < ITERATIONS; i++) {
     const mid = (lo + hi) / 2;
-    const successAtMid = successRateAt(params, mid);
+    const successAtMid = successRateAt(params, mid, seed);
     if (successAtMid >= target) {
       lo = mid;
       loSuccess = successAtMid;
