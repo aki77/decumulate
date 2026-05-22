@@ -42,11 +42,25 @@ function onPresetChange(e: Event) {
       <InputNumber id="defenseVolatility" v-model="state.defenseVolatility" min="0" max="20" step="0.5" />
     </div>
     <div class="field">
-      <label for="targetDefenseRatioPercent">
-        目標防衛割合（%）
-        <HelpIcon text="資産総額（リスク＋防衛＋iDeCo）に対する防衛資産の目標比率。月末リバランスはこの比率に戻すよう動作する。0% にすると防衛バケットを使わない運用。初回起動時は初期残高から自動算出される。" />
+      <label for="targetDefenseRatioStartPercent">
+        目標防衛割合 開始（%）
+        <HelpIcon text="シミュレーション開始時点（現在年齢）の目標防衛比率。グライドパス終了年齢まで線形補間で変化する。開始＝終了にすると全期間で一定の比率になる（従来の動作）。Bond Tent 戦略では積立期に低く設定してリスクを取り、引退近辺で終了値まで高めてシーケンスリスクを抑える。0% にすると防衛バケットを使わない運用。初回起動時は初期残高から自動算出される。" />
       </label>
-      <InputNumber id="targetDefenseRatioPercent" v-model="state.targetDefenseRatioPercent" min="0" max="100" step="1" />
+      <InputNumber id="targetDefenseRatioStartPercent" v-model="state.targetDefenseRatioStartPercent" min="0" max="100" step="1" />
+    </div>
+    <div class="field">
+      <label for="targetDefenseRatioEndPercent">
+        目標防衛割合 終了（%）
+        <HelpIcon text="グライドパス終了年齢以降に維持する目標防衛比率。終了年齢を超えるとこの値で固定される。" />
+      </label>
+      <InputNumber id="targetDefenseRatioEndPercent" v-model="state.targetDefenseRatioEndPercent" min="0" max="100" step="1" />
+    </div>
+    <div class="field">
+      <label for="glidePathEndAge">
+        グライドパス終了年齢
+        <HelpIcon text="目標防衛比率が「終了」値に到達する年齢。この年齢以降は終了値で固定。開始年齢以下に設定すると全期間で終了値が適用される。" />
+      </label>
+      <InputNumber id="glidePathEndAge" v-model="state.glidePathEndAge" min="0" max="120" step="1" />
     </div>
     <div class="field checkbox-field">
       <input id="defensePriorityOnDrawdown" v-model="state.defensePriorityOnDrawdown" type="checkbox" />

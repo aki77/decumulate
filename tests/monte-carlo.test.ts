@@ -43,7 +43,9 @@ const BASE_PARAMS: MonteCarloParams = {
   otherIncomes: [],
   defenseAnnualReturnRate: 0,
   defenseVolatility: 0,
-  targetDefenseRatio: 0,
+  targetDefenseRatioStart: 0,
+  targetDefenseRatioEnd: 0,
+  glidePathEndAge: 65,
   defensePriorityOnDrawdown: false,
   drawdownThresholdPercent: 10,
   rebalanceThresholdPoint: 5,
@@ -71,7 +73,9 @@ function withBuckets(initialAmount: number, defenseRatioPercent = 0): Partial<Mo
     initialNisa: initialAmount * (1 - dr),
     initialTaxableRisk: 0,
     initialDefense: initialAmount * dr,
-    targetDefenseRatio: defenseRatioPercent,
+    targetDefenseRatioStart: defenseRatioPercent,
+    targetDefenseRatioEnd: defenseRatioPercent,
+    glidePathEndAge: 65,
   };
 }
 
@@ -655,7 +659,9 @@ test("simulateMonteCarlo - pivot 月次の monthlyWithdrawal は内訳3バケッ
     initialTaxableRiskGain: 200000,
     initialDefense: 500000,
     initialDefenseGain: 50000,
-    targetDefenseRatio: 25,
+    targetDefenseRatioStart: 25,
+    targetDefenseRatioEnd: 25,
+    glidePathEndAge: 65,
     withdrawalStartYear: 0,
     withdrawalYears: 3,
     fixedMonthlyWithdrawal: 30000,

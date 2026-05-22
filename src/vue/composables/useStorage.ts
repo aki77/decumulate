@@ -2,7 +2,7 @@ import { watchDebounced } from "@vueuse/core";
 import type { OtherIncomeEntry } from "../../other-income.ts";
 import type { ParamsState, WithdrawalLimitStepInput } from "./useParams.ts";
 
-const STORAGE_KEY = "decumulate:inputs:v4";
+const STORAGE_KEY = "decumulate:inputs:v5";
 
 type StoredState = Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps"> & {
   otherIncomes: OtherIncomeEntry[];
@@ -48,7 +48,7 @@ function parseStoredData(raw: string): Partial<StoredState> | null {
       "withdrawalStartYear", "withdrawalYears", "fixedMonthlyWithdrawalMan",
       "withdrawalRate",
       "basePensionMan", "pensionStartAge", "defenseAnnualReturnRate", "defenseVolatility",
-      "targetDefenseRatioPercent",
+      "targetDefenseRatioStartPercent", "targetDefenseRatioEndPercent", "glidePathEndAge",
       "drawdownThresholdPercent", "rebalanceThresholdPoint",
       "initialIdecoMan", "initialIdecoGainMan", "idecoMonthlyContributionMan",
       "idecoContributionYears", "idecoReceiveStartAge", "idecoLumpSumRatio", "idecoPensionYears",

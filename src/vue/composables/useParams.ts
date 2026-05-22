@@ -73,7 +73,9 @@ export interface ParamsState {
   defenseProductPreset: string;
   defenseAnnualReturnRate: number;
   defenseVolatility: number;
-  targetDefenseRatioPercent: number;
+  targetDefenseRatioStartPercent: number;
+  targetDefenseRatioEndPercent: number;
+  glidePathEndAge: number;
   defensePriorityOnDrawdown: boolean;
   drawdownThresholdPercent: number;
   rebalanceThresholdPoint: number;
@@ -138,7 +140,9 @@ export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes" | "withdrawalLimit
   defenseProductPreset: "jgb10",
   defenseAnnualReturnRate: 0.5,
   defenseVolatility: 0,
-  targetDefenseRatioPercent: 0,
+  targetDefenseRatioStartPercent: 0,
+  targetDefenseRatioEndPercent: 0,
+  glidePathEndAge: 65,
   defensePriorityOnDrawdown: true,
   drawdownThresholdPercent: 10,
   rebalanceThresholdPoint: 5,
@@ -217,7 +221,9 @@ export function useParams() {
       otherIncomes: normalizeOtherIncomes(state.otherIncomes, state.currentAge, totalYears, MAN),
       defenseAnnualReturnRate: state.defenseAnnualReturnRate,
       defenseVolatility: state.defenseVolatility,
-      targetDefenseRatio: state.targetDefenseRatioPercent,
+      targetDefenseRatioStart: state.targetDefenseRatioStartPercent,
+      targetDefenseRatioEnd: state.targetDefenseRatioEndPercent,
+      glidePathEndAge: state.glidePathEndAge,
       defensePriorityOnDrawdown: state.defensePriorityOnDrawdown,
       drawdownThresholdPercent: state.drawdownThresholdPercent,
       rebalanceThresholdPoint: state.rebalanceThresholdPoint,

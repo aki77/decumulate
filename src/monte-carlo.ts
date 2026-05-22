@@ -9,6 +9,7 @@ import {
   executeNisaTransfer,
   findLimitForAge,
   needsRebalance,
+  resolveDefenseRatio,
   type CalculateParams,
   type MonthlyProjection,
   type NisaTransferInfo,
@@ -143,7 +144,9 @@ export function simulateMonteCarlo(
     otherIncomes,
     defenseAnnualReturnRate,
     defenseVolatility,
-    targetDefenseRatio,
+    targetDefenseRatioStart,
+    targetDefenseRatioEnd,
+    glidePathEndAge,
     defensePriorityOnDrawdown,
     drawdownThresholdPercent,
     rebalanceThresholdPoint,
@@ -159,8 +162,7 @@ export function simulateMonteCarlo(
   const ri = inflationRate / 100;
   const taxRate = TAX_RATE;
 
-  const dr = Math.max(0, Math.min(1, targetDefenseRatio / 100));
-  const useDefense = dr > 0;
+  const useDefense = targetDefenseRatioStart > 0 || targetDefenseRatioEnd > 0;
   const initialTotal = initialNisa + initialTaxableRisk + initialDefense;
 
   const nisaAnnualLimit = isCoupled ? NISA_ANNUAL_LIMIT * 2 : NISA_ANNUAL_LIMIT;
@@ -427,6 +429,7 @@ export function simulateMonteCarlo(
     const isWithdrawing =
       year > withdrawalStartYear && year <= withdrawalStartYear + withdrawalYears;
     const isFirstWithdrawalYear = year === withdrawalStartYear + 1;
+    const dr = resolveDefenseRatio(currentAge + year, currentAge, targetDefenseRatioStart, targetDefenseRatioEnd, glidePathEndAge);
     const checkDrawdown = priorityOnDrawdown && (isWithdrawing || skipRebalanceWhenDrawdown);
     const pensionActive =
       pensionStartYearOffset != null && year >= pensionStartYearOffset && monthlyPension > 0;

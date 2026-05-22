@@ -55,7 +55,9 @@ export interface CalculateParams {
 
   // 防衛資産
   defenseAnnualReturnRate: number;
-  targetDefenseRatio: number;
+  targetDefenseRatioStart: number;
+  targetDefenseRatioEnd: number;
+  glidePathEndAge: number;
   rebalanceThresholdPoint: number;
   defensePriorityOnDrawdown: boolean;
 
@@ -266,6 +268,22 @@ export interface RebalanceTriResult {
   info: RebalanceInfo | null;
 }
 
+export function resolveDefenseRatio(
+  ageThisYear: number,
+  currentAge: number,
+  startPercent: number,
+  endPercent: number,
+  endAge: number,
+): number {
+  const startDr = Math.max(0, Math.min(1, startPercent / 100));
+  const endDr = Math.max(0, Math.min(1, endPercent / 100));
+  if (endAge <= currentAge) return endDr;
+  if (ageThisYear <= currentAge) return startDr;
+  if (ageThisYear >= endAge) return endDr;
+  const t = (ageThisYear - currentAge) / (endAge - currentAge);
+  return startDr + (endDr - startDr) * t;
+}
+
 // 3バケット用リバランス。
 // - 売却方向（リスクサイド過大 → 防衛買付）: 特定リスクから優先売却、不足分のみNISAから（NISA売却は非課税）。
 // - 買付方向（防衛過大 → リスクサイド買付）: 防衛から売却、税引後proceedsをNISA枠残優先で充当、超過分は特定リスクへ。
@@ -442,7 +460,9 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     currentAge,
     otherIncomes,
     defenseAnnualReturnRate,
-    targetDefenseRatio,
+    targetDefenseRatioStart,
+    targetDefenseRatioEnd,
+    glidePathEndAge,
     rebalanceThresholdPoint,
     defensePriorityOnDrawdown,
     isCoupled,
@@ -485,9 +505,6 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     : { total: 0, principal: 0 };
   const idecoReceiveOffset = idecoReceiveStartYearOffset(ideco.idecoReceiveStartAge, currentAge);
   const idecoReceiveAge = computeIdecoReceiveAge(ideco.idecoReceiveStartAge, currentAge);
-
-  // 目標防衛割合（リバランスの目標値）。UI 入力（%）を 0–1 にクランプ。
-  const dr = Math.max(0, Math.min(1, targetDefenseRatio / 100));
 
   let lifetimeNisaUsed = Math.max(0, nisaInitialLifetimeUsed);
 
@@ -549,6 +566,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
 
     // 年初にこの年の floor/ceiling を解決。月次ループ内では分割代入を作らずローカル変数で参照する。
     const ageThisYear = currentAge + year;
+    const dr = resolveDefenseRatio(ageThisYear, currentAge, targetDefenseRatioStart, targetDefenseRatioEnd, glidePathEndAge);
     const limitsThisYear = findLimitForAge(nominalLimitSchedule, ageThisYear);
     const floorThisYear = limitsThisYear.floor;
     const ceilingThisYear = limitsThisYear.ceiling;

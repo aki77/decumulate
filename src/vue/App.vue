@@ -41,7 +41,9 @@ function estimateTargetDefenseRatioPercent(): number {
 onMounted(() => {
   const loaded = storage.load();
   if (!loaded) {
-    state.targetDefenseRatioPercent = estimateTargetDefenseRatioPercent();
+    const est = estimateTargetDefenseRatioPercent();
+    state.targetDefenseRatioStartPercent = est;
+    state.targetDefenseRatioEndPercent = est;
   }
   storage.startAutoSave();
 });
@@ -49,7 +51,9 @@ onMounted(() => {
 function handleReset() {
   storage.reset();
   Object.assign(state, { ...DEFAULT_PARAMS });
-  state.targetDefenseRatioPercent = estimateTargetDefenseRatioPercent();
+  const est = estimateTargetDefenseRatioPercent();
+  state.targetDefenseRatioStartPercent = est;
+  state.targetDefenseRatioEndPercent = est;
 }
 
 function handleExport() {
