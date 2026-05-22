@@ -339,6 +339,7 @@ export function simulateMonteCarlo(
     taxableRiskTotal: number;
     defenseTotal: number;
     idecoTotal: number;
+    baseWithdrawalTarget: number;
     monthlyWithdrawal: number;
     monthlyWithdrawalNisa: number;
     monthlyWithdrawalTaxableRisk: number;
@@ -382,7 +383,7 @@ export function simulateMonteCarlo(
       monthlyWithdrawalDefense: Math.round(raw.monthlyWithdrawalDefense),
       monthlyWithdrawalTaxTaxableRisk: Math.round(raw.monthlyWithdrawalTaxTaxableRisk),
       monthlyWithdrawalTaxDefense: Math.round(raw.monthlyWithdrawalTaxDefense),
-      baseWithdrawal: Math.round(raw.monthlyWithdrawal),
+      baseWithdrawal: Math.round(raw.baseWithdrawalTarget),
       rateWithdrawalBasis:
         raw.month === 1 && (isRateMode || isRateRiskMode || isGuardrailMode)
           ? isRateRiskMode || isGuardrailMode
@@ -559,6 +560,7 @@ export function simulateMonteCarlo(
         let withdrawalFromDefenseRecorded = 0;
         let withdrawalTaxTaxableRecorded = 0;
         let withdrawalTaxDefenseRecorded = 0;
+        let baseWithdrawalRecorded = 0;
         let pensionRecorded = 0;
         let otherIncomeRecorded = 0;
         let rebalanceInfoRecorded: RebalanceInfo | null = null;
@@ -687,6 +689,7 @@ export function simulateMonteCarlo(
           const netWithdrawal = Math.max(baseWithdrawal - income, 0);
 
           if (recordPivot) {
+            baseWithdrawalRecorded = baseWithdrawal;
             pensionRecorded = monthPension;
             otherIncomeRecorded = monOtherIncomeWithIdeco;
           }
@@ -883,6 +886,7 @@ export function simulateMonteCarlo(
             defenseTotal:
               useDefense && defensePaths !== null ? defensePaths[i]! : 0,
             idecoTotal: useIdeco ? idecoPaths![i]! : 0,
+            baseWithdrawalTarget: baseWithdrawalRecorded,
             monthlyWithdrawal: monthlyWithdrawalRecorded,
             monthlyWithdrawalNisa: withdrawalFromNisaRecorded,
             monthlyWithdrawalTaxableRisk: withdrawalFromTaxableRecorded,

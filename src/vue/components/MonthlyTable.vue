@@ -118,7 +118,8 @@ const yearGroups = computed<YearGroup[]>(() => {
     if (first.baseWithdrawal > 0) {
       const pension = first.monthlyPension;
       const other = first.monthlyOtherIncome;
-      const total = first.baseWithdrawal + pension + other;
+      const total = first.baseWithdrawal;
+      const netWithdrawal = total - pension - other;
       const isRateMode = params.withdrawalMode === "rate" || params.withdrawalMode === "rate-risk";
       const lines: string[] = [];
       if (isRateMode && first.rateWithdrawalBasis != null) {
@@ -129,7 +130,10 @@ const yearGroups = computed<YearGroup[]>(() => {
       }
       if (pension > 0) lines.push(`年金: ${formatMan(pension)}`);
       if (other > 0) lines.push(`その他収入: ${formatMan(other)}`);
-      if (pension > 0 || other > 0) lines.push(`合計: ${formatMan(total)}`);
+      if (pension > 0 || other > 0) {
+        lines.push(`資産取り崩し: ${formatMan(netWithdrawal)}`);
+        lines.push(`合計: ${formatMan(total)}`);
+      }
       base = { summary: formatMan(total), detailHtml: lines.join("<br>") };
     }
     groups.push({ year, age, rows, yearlyGain, yearlyRate, yearBand, base });
