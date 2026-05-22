@@ -134,6 +134,7 @@ export interface MonthlyProjection {
   monthlyGainIdeco: number;
   monthlyGain: number;
   monthlyRate: number;
+  monthlyRateRisk: number;
   rebalanceInfo: RebalanceInfo | null;
   nisaTransferInfo: NisaTransferInfo | null;
   idecoLumpSumInfo: IdecoPayoutEvent | null;
@@ -616,6 +617,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
       const prevNisa = nisaTotal;
       const prevTaxableRisk = taxableRiskTotal;
       const prevDefense = defenseTotal;
+      const prevIdeco = idecoState.total;
       nisaTotal *= 1 + monthlyRateRisk;
       taxableRiskTotal *= 1 + monthlyRateRisk;
       defenseTotal *= 1 + monthlyRateDefense;
@@ -816,9 +818,12 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         }
       }
 
-      const prevTotal = prevNisa + prevTaxableRisk + prevDefense;
-      const monthlyRate =
-        prevTotal > 0 ? (gainRisk + gainDefense + gainIdeco) / prevTotal : 0;
+      const prevRiskSide = prevNisa + prevTaxableRisk + prevIdeco;
+      const prevTotal = prevRiskSide + prevDefense;
+      const gainRiskAll = gainRisk + gainIdeco;
+      const gainTotal = gainRiskAll + gainDefense;
+      const monthlyRate = prevTotal > 0 ? gainTotal / prevTotal : 0;
+      const monthlyRateRiskSide = prevRiskSide > 0 ? gainRiskAll / prevRiskSide : 0;
       monthlyArr.push({
         year,
         month: m + 1,
@@ -844,8 +849,9 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         monthlyGainTaxableRisk: Math.round(gainTaxableRisk),
         monthlyGainDefense: Math.round(gainDefense),
         monthlyGainIdeco: Math.round(gainIdeco),
-        monthlyGain: Math.round(gainRisk + gainDefense + gainIdeco),
+        monthlyGain: Math.round(gainTotal),
         monthlyRate,
+        monthlyRateRisk: monthlyRateRiskSide,
         rebalanceInfo,
         nisaTransferInfo: m === 0 ? yearStartTransferInfo : null,
         idecoLumpSumInfo,

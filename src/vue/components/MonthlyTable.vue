@@ -80,6 +80,9 @@ function buildRiskBreakdownHtml(r: MonthlyProjection): string {
   if (r.idecoTotal > 0) {
     lines.push(`iDeCo: ${formatMonthlyGain(r.monthlyGainIdeco)}`);
   }
+  lines.push(
+    `月率 ${formatRate(r.monthlyRateRisk)}（リスク資産 = NISA + 特定リスク${r.idecoTotal > 0 ? " + iDeCo" : ""} に対する月次損益率）`,
+  );
   return lines.join("<br>");
 }
 
@@ -169,7 +172,14 @@ const yearGroups = computed<YearGroup[]>(() => {
         </template>
         <span class="year-summary">年合計運用損益 {{ formatMonthlyGain(g.yearlyGain) }}</span>
         {{ ' ' }}
-        <span class="year-summary year-rate" :data-rate-band="g.yearBand">年率 {{ formatRate(g.yearlyRate) }}</span>
+        <span class="year-summary year-rate" :data-rate-band="g.yearBand">
+          年率 {{ formatRate(g.yearlyRate) }}
+          <HelpIcon
+            text="資産全体（リスク資産 + 防衛資産）に対する年複利率。12ヶ月の月率を複利合成した値。"
+            ariaLabel="年率の基準"
+            compact
+          />
+        </span>
       </summary>
       <table class="monthly-table">
         <thead>
@@ -179,7 +189,14 @@ const yearGroups = computed<YearGroup[]>(() => {
             <th colspan="2" class="group-header group-defense">防衛資産</th>
             <th rowspan="2">合計</th>
             <th colspan="3" class="group-header group-cashflow">キャッシュフロー</th>
-            <th rowspan="2">月率</th>
+            <th rowspan="2">
+              月率
+              <HelpIcon
+                text="資産全体（リスク資産 + 防衛資産）に対する月次損益率。"
+                ariaLabel="月率の基準"
+                compact
+              />
+            </th>
             <th rowspan="2">イベント</th>
           </tr>
           <tr>
@@ -209,6 +226,7 @@ const yearGroups = computed<YearGroup[]>(() => {
             </td>
             <td :class="row.riskCombined < 0 ? 'neg' : ''">
               {{ formatMonthlyGain(row.riskCombined) }}
+              <span class="cell-sub-inline">({{ formatRate(row.src.monthlyRateRisk) }})</span>
               <HelpIcon :text="row.riskBreakdownHtml" ariaLabel="リスク損益内訳" />
             </td>
             <td>
@@ -335,12 +353,21 @@ const yearGroups = computed<YearGroup[]>(() => {
   color: var(--danger);
 }
 
-.monthly-table .cell-sub {
-  display: block;
+.monthly-table .cell-sub,
+.monthly-table .cell-sub-inline {
   font-size: 0.85em;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.monthly-table .cell-sub {
+  display: block;
   line-height: 1.1;
   margin-top: 1px;
+}
+
+.monthly-table .cell-sub-inline {
+  margin-left: 2px;
 }
 
 .monthly-table th.group-header {

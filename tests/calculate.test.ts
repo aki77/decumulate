@@ -637,6 +637,58 @@ test("calculateCompound - 2バケット（特定リスク+防衛）では monthl
   assert.ok(Math.abs(monthly[0]!.monthlyRate - expected) < 1e-9);
 });
 
+test("calculateCompound - monthlyRateRisk はリスク資産のみの月率（防衛の影響を受けない）", () => {
+  // 特定リスク 500万 + 防衛 500万、リスク年10%/防衛年2%
+  // monthlyRateRisk = リスク資産月率（特定100%なので Math.pow(1.10, 1/12)-1 と一致）
+  // monthlyRate     = 全体の加重平均（rRisk と rDef の中間）
+  const { monthly } = calculateCompound({
+    ...BASE_PARAMS,
+    initialTaxableRisk: 5000000,
+    initialDefense: 5000000,
+    monthlyContribution: 0,
+    annualReturnRate: 10,
+    expenseRatio: 0,
+    defenseAnnualReturnRate: 2,
+    contributionYears: 0,
+    withdrawalStartYear: 1,
+    withdrawalYears: 0,
+  });
+  const rRisk = Math.pow(1.10, 1 / 12) - 1;
+  const first = monthly[0]!;
+  assert.ok(Math.abs(first.monthlyRateRisk - rRisk) < 1e-9);
+  // 全体率 < リスク資産率 になっているはず（防衛が低利回りなので）
+  assert.ok(first.monthlyRate < first.monthlyRateRisk);
+});
+
+test("calculateCompound - monthlyRateRisk は iDeCo も含むリスクサイド基準", () => {
+  // 特定リスク 300万 + iDeCo 200万 + 防衛 500万、リスク10%/iDeCo10%（同利回り）/防衛2%
+  // monthlyRateRisk の分母はリスク資産 = 特定 + iDeCo = 500万、分子は両者の月次損益
+  // → リスク月率と一致するはず
+  const { monthly } = calculateCompound({
+    ...BASE_PARAMS,
+    initialTaxableRisk: 3000000,
+    initialDefense: 5000000,
+    monthlyContribution: 0,
+    annualReturnRate: 10,
+    expenseRatio: 0,
+    defenseAnnualReturnRate: 2,
+    contributionYears: 0,
+    withdrawalStartYear: 1,
+    withdrawalYears: 0,
+    idecoEnabled: true,
+    ideco: {
+      ...BASE_PARAMS.ideco,
+      initialIdeco: 2000000,
+      idecoReceiveStartAge: 60,
+      idecoLumpSumRatio: 1,
+    },
+  });
+  const rRisk = Math.pow(1.10, 1 / 12) - 1;
+  const first = monthly[0]!;
+  // iDeCo もリスク利回りで運用されるので monthlyRateRisk は rRisk と一致
+  assert.ok(Math.abs(first.monthlyRateRisk - rRisk) < 1e-9);
+});
+
 // --- defensePriorityOnDrawdown ---
 
 test("calculateCompound - defensePriorityOnDrawdown=true は平時リスク優先で防衛資産を温存", () => {

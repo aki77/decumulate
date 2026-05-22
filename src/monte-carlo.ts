@@ -360,11 +360,12 @@ export function simulateMonteCarlo(
   };
 
   const buildRow = (raw: RawRowInput): MonthlyProjection => {
-    const prevTotal = raw.prevNisa + raw.prevTaxable + raw.prevDefense + raw.prevIdeco;
-    const monthlyRate =
-      prevTotal > 0
-        ? (raw.monthlyGainRisk + raw.monthlyGainDefense + raw.monthlyGainIdeco) / prevTotal
-        : 0;
+    const prevRiskSide = raw.prevNisa + raw.prevTaxable + raw.prevIdeco;
+    const prevTotal = prevRiskSide + raw.prevDefense;
+    const gainRiskAll = raw.monthlyGainRisk + raw.monthlyGainIdeco;
+    const gainTotal = gainRiskAll + raw.monthlyGainDefense;
+    const monthlyRate = prevTotal > 0 ? gainTotal / prevTotal : 0;
+    const monthlyRateRisk = prevRiskSide > 0 ? gainRiskAll / prevRiskSide : 0;
     return {
       year: raw.year,
       month: raw.month,
@@ -397,10 +398,9 @@ export function simulateMonteCarlo(
       monthlyGainTaxableRisk: Math.round(raw.monthlyGainTaxableRisk),
       monthlyGainDefense: Math.round(raw.monthlyGainDefense),
       monthlyGainIdeco: Math.round(raw.monthlyGainIdeco),
-      monthlyGain: Math.round(
-        raw.monthlyGainRisk + raw.monthlyGainDefense + raw.monthlyGainIdeco,
-      ),
+      monthlyGain: Math.round(gainTotal),
       monthlyRate,
+      monthlyRateRisk,
       rebalanceInfo: raw.rebalanceInfo,
       nisaTransferInfo: raw.nisaTransferInfo,
       idecoLumpSumInfo: raw.idecoLumpSumInfo,
