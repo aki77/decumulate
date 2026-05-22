@@ -705,8 +705,15 @@ export function simulateMonteCarlo(
                 fromRiskSide = Math.min(netWithdrawal, liquidRiskSide);
                 fromDefense = netWithdrawal - fromRiskSide;
               } else {
-                fromRiskSide = netWithdrawal * (liquidRiskSide / total);
-                fromDefense = netWithdrawal * (defenseValue / total);
+                // iDeCo は取り崩し不可なので按分の分母から除く（決定論版 splitProportional と挙動を揃える）
+                const drawableTotal = liquidRiskSide + defenseValue;
+                if (drawableTotal > 0) {
+                  fromRiskSide = netWithdrawal * (liquidRiskSide / drawableTotal);
+                  fromDefense = netWithdrawal * (defenseValue / drawableTotal);
+                } else {
+                  fromRiskSide = 0;
+                  fromDefense = 0;
+                }
               }
               if (fromRiskSide > liquidRiskSide) {
                 fromDefense += fromRiskSide - liquidRiskSide;

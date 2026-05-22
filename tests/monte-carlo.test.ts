@@ -415,6 +415,49 @@ test("simulateMonteCarlo - defensePriorityOnDrawdown=false は時価比率按分
   assert.ok(last.defenseTotal < 4500000, `defenseTotal=${last.defenseTotal}`);
 });
 
+test("simulateMonteCarlo - iDeCo保有時の比率按分でも取り崩し額が baseWithdrawal と一致する（回帰）", () => {
+  // 過去バグ: 比率按分の分母に iDeCo を含めていたため、iDeCo は取り崩し不可なのに
+  // 分母に入ることで「fromRiskSide + fromDefense < netWithdrawal」となり、
+  // iDeCo 割合分の取り崩しが消失していた（UI上「合計生活費>純引出」表示）。
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    initialNisa: 5000000,
+    initialTaxableRisk: 5000000,
+    initialDefense: 5000000,
+    targetDefenseRatioStart: 33,
+    targetDefenseRatioEnd: 33,
+    annualReturnRate: 0,
+    volatility: 0,
+    withdrawalYears: 1,
+    fixedMonthlyWithdrawal: 100000,
+    rebalanceThresholdPoint: 100, // リバランスを実質無効化
+    drawdownThresholdPercent: 100, // ドローダウン判定を実質無効化
+    idecoEnabled: true,
+    ideco: {
+      initialIdeco: 5000000,
+      initialIdecoGain: 0,
+      idecoMonthlyContribution: 0,
+      idecoContributionYears: 0,
+      idecoReceiveStartAge: 90, // 受取開始を遠ざけて受取イベントが起きないようにする
+      idecoLumpSumRatio: 1,
+      idecoPensionYears: 10,
+    },
+  };
+  const result = simulateMonteCarlo(params, SEED);
+  const first = result.pivotMonthlies.p50[0]!;
+  assert.strictEqual(first.baseWithdrawal, 100000);
+  // 古いバグでは iDeCo を分母に含む按分 (NISA+特定+iDeCo+防衛=20M) で fromDefense=25000。
+  // 正しくは iDeCo を除く分母 (NISA+特定+防衛=15M) で fromDefense=33333。
+  assert.ok(
+    Math.abs(first.monthlyWithdrawalDefense - 33333) <= 1,
+    `monthlyWithdrawalDefense=${first.monthlyWithdrawalDefense} (期待: ~33333、古いバグ下では ~25000)`,
+  );
+  assert.ok(
+    Math.abs(first.monthlyWithdrawal - first.baseWithdrawal) <= 1,
+    `monthlyWithdrawal=${first.monthlyWithdrawal}, baseWithdrawal=${first.baseWithdrawal}`,
+  );
+});
+
 test("simulateMonteCarlo - defensePriorityOnDrawdown=true 高ボラでも完走し p10≤p50≤p90", () => {
   const params: MonteCarloParams = {
     ...BASE_PARAMS,
