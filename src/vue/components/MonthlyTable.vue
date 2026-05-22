@@ -50,13 +50,15 @@ function formatRate(rate: number): string {
 interface DisplayRow {
   src: MonthlyProjection;
   riskCombined: number;
-  riskBreakdownHtml: string;
-  withdrawalBreakdownHtml: string;
 }
 
 interface BaseInfo {
   summary: string;
-  detailHtml: string;
+  formula: string | null;
+  pension: number;
+  other: number;
+  netWithdrawal: number;
+  total: number;
 }
 
 interface YearGroup {
@@ -72,43 +74,6 @@ interface YearGroup {
 const showIdeco = computed(() => props.params.idecoEnabled);
 const riskColspan = computed(() => showIdeco.value ? 5 : 4);
 
-// TODO: HelpIcon の slot 化に合わせて Vue テンプレで組み立てる形にリファクタ
-function buildRiskBreakdownHtml(r: MonthlyProjection): string {
-  const lines = [
-    "リスク資産の月次運用損益（取り崩し・リバランス・積立は含まない）",
-    `NISA: ${formatMonthlyGain(r.monthlyGainNisa)}`,
-    `特定リスク: ${formatMonthlyGain(r.monthlyGainTaxableRisk)}`,
-  ];
-  if (r.idecoTotal > 0) {
-    lines.push(`iDeCo: ${formatMonthlyGain(r.monthlyGainIdeco)}`);
-  }
-  lines.push(
-    `月率 ${formatRate(r.monthlyRateRisk)}（リスク資産 = NISA + 特定リスク${r.idecoTotal > 0 ? " + iDeCo" : ""} に対する月次損益率）`,
-  );
-  return lines.join("<br>");
-}
-
-// TODO: HelpIcon の slot 化に合わせて Vue テンプレで組み立てる形にリファクタ
-function buildWithdrawalBreakdownHtml(r: MonthlyProjection): string {
-  const lines: string[] = [];
-  if (r.monthlyWithdrawalTaxableRisk > 0) {
-    const taxStr = r.monthlyWithdrawalTaxTaxableRisk > 0
-      ? ` (税 ${formatMan(r.monthlyWithdrawalTaxTaxableRisk)})`
-      : "";
-    lines.push(`特定リスク: ${formatMan(r.monthlyWithdrawalTaxableRisk)}${taxStr}`);
-  }
-  if (r.monthlyWithdrawalNisa > 0) {
-    lines.push(`NISA: ${formatMan(r.monthlyWithdrawalNisa)}`);
-  }
-  if (r.monthlyWithdrawalDefense > 0) {
-    const taxStr = r.monthlyWithdrawalTaxDefense > 0
-      ? ` (税 ${formatMan(r.monthlyWithdrawalTaxDefense)})`
-      : "";
-    lines.push(`防衛: ${formatMan(r.monthlyWithdrawalDefense)}${taxStr}`);
-  }
-  return lines.join("<br>");
-}
-
 const yearGroups = computed<YearGroup[]>(() => {
   const { monthly, params } = props;
   if (monthly.length === 0) return [];
@@ -118,8 +83,6 @@ const yearGroups = computed<YearGroup[]>(() => {
     const row: DisplayRow = {
       src: m,
       riskCombined: m.monthlyGainRisk + m.monthlyGainIdeco,
-      riskBreakdownHtml: buildRiskBreakdownHtml(m),
-      withdrawalBreakdownHtml: buildWithdrawalBreakdownHtml(m),
     };
     const list = byYear.get(m.year);
     if (list) list.push(row);
@@ -140,20 +103,12 @@ const yearGroups = computed<YearGroup[]>(() => {
       const total = first.baseWithdrawal;
       const netWithdrawal = total - pension - other;
       const isRateMode = params.withdrawalMode === "rate" || params.withdrawalMode === "rate-risk";
-      const lines: string[] = [];
+      let formula: string | null = null;
       if (isRateMode && first.rateWithdrawalBasis != null) {
         const basisLabel = params.withdrawalMode === "rate-risk" ? "リスク資産" : "総資産";
-        lines.push(`${basisLabel} ${formatMan(first.rateWithdrawalBasis)} × ${params.withdrawalRate}% / 12 = ${formatMan(first.baseWithdrawal)}`);
-      } else {
-        lines.push(`資産取り崩し目標: ${formatMan(first.baseWithdrawal)}`);
+        formula = `${basisLabel} ${formatMan(first.rateWithdrawalBasis)} × ${params.withdrawalRate}% / 12 = ${formatMan(first.baseWithdrawal)}`;
       }
-      if (pension > 0) lines.push(`年金: ${formatMan(pension)}`);
-      if (other > 0) lines.push(`その他収入: ${formatMan(other)}`);
-      if (pension > 0 || other > 0) {
-        lines.push(`資産取り崩し: ${formatMan(netWithdrawal)}`);
-        lines.push(`合計: ${formatMan(total)}`);
-      }
-      base = { summary: formatMan(total), detailHtml: lines.join("<br>") };
+      base = { summary: formatMan(total), formula, pension, other, netWithdrawal, total };
     }
     groups.push({ year, age, rows, yearlyGain, yearlyRate, yearBand, base });
   }
@@ -169,7 +124,7 @@ const yearGroups = computed<YearGroup[]>(() => {
         <template v-if="g.base">
           <span class="year-summary">
             合計生活費 {{ g.base.summary }}
-            <HelpIcon :text="g.base.detailHtml" ariaLabel="内訳" compact />
+            <HelpIcon ariaLabel="内訳" compact><template v-if="g.base.formula">{{ g.base.formula }}</template><template v-else>資産取り崩し目標: {{ formatMan(g.base.total) }}</template><template v-if="g.base.pension > 0"><br>年金: {{ formatMan(g.base.pension) }}</template><template v-if="g.base.other > 0"><br>その他収入: {{ formatMan(g.base.other) }}</template><template v-if="g.base.pension > 0 || g.base.other > 0"><br>資産取り崩し: {{ formatMan(g.base.netWithdrawal) }}<br>合計: {{ formatMan(g.base.total) }}</template></HelpIcon>
           </span>
           {{ ' ' }}
         </template>
@@ -230,7 +185,9 @@ const yearGroups = computed<YearGroup[]>(() => {
             <td :class="row.riskCombined < 0 ? 'neg' : ''">
               {{ formatMonthlyGain(row.riskCombined) }}
               <span class="cell-sub-inline">({{ formatRate(row.src.monthlyRateRisk) }})</span>
-              <HelpIcon :text="row.riskBreakdownHtml" ariaLabel="リスク損益内訳" />
+              <HelpIcon
+                ariaLabel="リスク損益内訳"
+              >リスク資産の月次運用損益（取り崩し・リバランス・積立は含まない）<br>NISA: {{ formatMonthlyGain(row.src.monthlyGainNisa) }}<br>特定リスク: {{ formatMonthlyGain(row.src.monthlyGainTaxableRisk) }}<template v-if="row.src.idecoTotal > 0"><br>iDeCo: {{ formatMonthlyGain(row.src.monthlyGainIdeco) }}</template><br>月率 {{ formatRate(row.src.monthlyRateRisk) }}（リスク資産 = NISA + 特定リスク<template v-if="row.src.idecoTotal > 0"> + iDeCo</template> に対する月次損益率）</HelpIcon>
             </td>
             <td>
               {{ formatMan(row.src.defenseTotal) }}
@@ -247,27 +204,25 @@ const yearGroups = computed<YearGroup[]>(() => {
             <td>
               {{ formatMan(row.src.monthlyWithdrawal) }}
               <HelpIcon
-                v-if="row.withdrawalBreakdownHtml"
-                :text="row.withdrawalBreakdownHtml"
+                v-if="row.src.monthlyWithdrawalTaxableRisk > 0 || row.src.monthlyWithdrawalNisa > 0 || row.src.monthlyWithdrawalDefense > 0"
                 ariaLabel="純引出内訳"
-              />
+              ><template v-if="row.src.monthlyWithdrawalTaxableRisk > 0">特定リスク: {{ formatMan(row.src.monthlyWithdrawalTaxableRisk) }}<template v-if="row.src.monthlyWithdrawalTaxTaxableRisk > 0"> (税 {{ formatMan(row.src.monthlyWithdrawalTaxTaxableRisk) }})</template></template><template v-if="row.src.monthlyWithdrawalNisa > 0"><br v-if="row.src.monthlyWithdrawalTaxableRisk > 0">NISA: {{ formatMan(row.src.monthlyWithdrawalNisa) }}</template><template v-if="row.src.monthlyWithdrawalDefense > 0"><br v-if="row.src.monthlyWithdrawalTaxableRisk > 0 || row.src.monthlyWithdrawalNisa > 0">防衛: {{ formatMan(row.src.monthlyWithdrawalDefense) }}<template v-if="row.src.monthlyWithdrawalTaxDefense > 0"> (税 {{ formatMan(row.src.monthlyWithdrawalTaxDefense) }})</template></template></HelpIcon>
             </td>
             <td>{{ formatMan(row.src.monthlyPension) }}</td>
             <td>{{ formatMan(row.src.monthlyOtherIncome) }}</td>
             <td class="monthly-rate" :data-rate-band="classifyRateBand(row.src.monthlyRate, false)">{{ formatRate(row.src.monthlyRate) }}</td>
-            <!-- TODO: .event-tip 内の v-html による文字列連結を slot ベースの Vue テンプレに置き換え -->
             <td>
               <template v-if="row.src.nisaTransferInfo">
-                <span class="event-badge" data-kind="transfer" tabindex="0" aria-label="NISA振替">▲<span class="event-tip" v-html="`特定 → NISA 振替<br>売却額 ${formatMan(row.src.nisaTransferInfo.sellAmount)}<br>税額 ${formatMan(row.src.nisaTransferInfo.taxAmount)}<br>NISA買付 ${formatMan(row.src.nisaTransferInfo.proceeds)}`"></span></span>
+                <span class="event-badge" data-kind="transfer" tabindex="0" aria-label="NISA振替">▲<span class="event-tip">特定 → NISA 振替<br>売却額 {{ formatMan(row.src.nisaTransferInfo.sellAmount) }}<br>税額 {{ formatMan(row.src.nisaTransferInfo.taxAmount) }}<br>NISA買付 {{ formatMan(row.src.nisaTransferInfo.proceeds) }}</span></span>
               </template>
               <template v-if="row.src.rebalanceInfo">
-                <span class="event-badge" data-kind="rebalance" :data-direction="row.src.rebalanceInfo.direction" tabindex="0" :aria-label="row.src.rebalanceInfo.direction === 'risk-to-defense' ? 'リスク → 防衛' : '防衛 → リスク'">●<span class="event-tip" v-html="`${row.src.rebalanceInfo.direction === 'risk-to-defense' ? 'リスク → 防衛' : '防衛 → リスク'}<br>売却額 ${formatMan(row.src.rebalanceInfo.sellAmount)}<br>税額 ${formatMan(row.src.rebalanceInfo.taxAmount)}<br>受取額 ${formatMan(row.src.rebalanceInfo.proceeds)}${row.src.rebalanceInfo.nisaUsed > 0 ? '<br>うちNISA枠充当 ' + formatMan(row.src.rebalanceInfo.nisaUsed) : ''}`"></span></span>
+                <span class="event-badge" data-kind="rebalance" :data-direction="row.src.rebalanceInfo.direction" tabindex="0" :aria-label="row.src.rebalanceInfo.direction === 'risk-to-defense' ? 'リスク → 防衛' : '防衛 → リスク'">●<span class="event-tip"><template v-if="row.src.rebalanceInfo.direction === 'risk-to-defense'">リスク → 防衛</template><template v-else>防衛 → リスク</template><br>売却額 {{ formatMan(row.src.rebalanceInfo.sellAmount) }}<br>税額 {{ formatMan(row.src.rebalanceInfo.taxAmount) }}<br>受取額 {{ formatMan(row.src.rebalanceInfo.proceeds) }}<template v-if="row.src.rebalanceInfo.nisaUsed > 0"><br>うちNISA枠充当 {{ formatMan(row.src.rebalanceInfo.nisaUsed) }}</template></span></span>
               </template>
               <template v-if="row.src.idecoLumpSumInfo">
-                <span class="event-badge" data-kind="ideco-lump" tabindex="0" aria-label="iDeCo一時金">■<span class="event-tip" v-html="`iDeCo 一時金受取<br>受取総額 ${formatMan(row.src.idecoLumpSumInfo.grossAmount)}<br>税額 ${formatMan(row.src.idecoLumpSumInfo.taxAmount)}<br>特定リスクへ ${formatMan(row.src.idecoLumpSumInfo.proceeds)}`"></span></span>
+                <span class="event-badge" data-kind="ideco-lump" tabindex="0" aria-label="iDeCo一時金">■<span class="event-tip">iDeCo 一時金受取<br>受取総額 {{ formatMan(row.src.idecoLumpSumInfo.grossAmount) }}<br>税額 {{ formatMan(row.src.idecoLumpSumInfo.taxAmount) }}<br>特定リスクへ {{ formatMan(row.src.idecoLumpSumInfo.proceeds) }}</span></span>
               </template>
               <template v-if="row.src.idecoPensionInfo">
-                <span class="event-badge" data-kind="ideco-pension" tabindex="0" aria-label="iDeCo年金">◆<span class="event-tip" v-html="`iDeCo 年金受取<br>受取総額 ${formatMan(row.src.idecoPensionInfo.grossAmount)}<br>税額 ${formatMan(row.src.idecoPensionInfo.taxAmount)}<br>税引後 ${formatMan(row.src.idecoPensionInfo.proceeds)}`"></span></span>
+                <span class="event-badge" data-kind="ideco-pension" tabindex="0" aria-label="iDeCo年金">◆<span class="event-tip">iDeCo 年金受取<br>受取総額 {{ formatMan(row.src.idecoPensionInfo.grossAmount) }}<br>税額 {{ formatMan(row.src.idecoPensionInfo.taxAmount) }}<br>税引後 {{ formatMan(row.src.idecoPensionInfo.proceeds) }}</span></span>
               </template>
             </td>
           </tr>
