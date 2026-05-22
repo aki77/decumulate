@@ -12,7 +12,7 @@ const anchorName = `--help-${useId()}`;
     :style="{ anchorName }"
     tabindex="0"
     :aria-label="ariaLabel ?? 'ヘルプ'"
-  >?<span class="help-tip" :style="{ positionAnchor: anchorName }"><slot><span v-html="text"></span></slot></span></span>
+  >?<span class="help-tip" :style="{ positionAnchor: anchorName }"><slot>{{ text }}</slot></span></span>
 </template>
 
 <style scoped>
