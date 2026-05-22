@@ -62,6 +62,12 @@ function buildChart(): void {
   const p90Cum = mc.yearly.map((y) => toMan(y.p90));
 
   let sequenceYearly: number[] | null = null;
+  // seqWindowEndYear: 取り崩し開始年 + ウィンドウ年数（境界は年単位で丸める）
+  const seqWindowYears = mc.sequenceP10Diagnostics
+    ? Math.ceil(mc.sequenceP10Diagnostics.seqWindowMonths / 12)
+    : 5;
+  const seqWindowEndYear = params.withdrawalStartYear + seqWindowYears;
+
   if (mc.sequenceP10Monthly.length > 0) {
     sequenceYearly = [toMan(mc.yearly[0]!.p50)];
     for (let y = 1; y < mc.yearly.length; y++) {
@@ -98,10 +104,19 @@ function buildChart(): void {
           borderColor: "rgba(220, 38, 38, 0.9)",
           backgroundColor: "transparent",
           borderWidth: 2,
-          borderDash: [6, 4],
           fill: false,
           pointRadius: 0,
           tension: 0,
+          segment: {
+            borderColor: (ctx: { p1DataIndex: number }) =>
+              ctx.p1DataIndex <= seqWindowEndYear
+                ? "rgba(220, 38, 38, 0.9)"
+                : "rgba(220, 38, 38, 0.35)",
+            borderWidth: (ctx: { p1DataIndex: number }) =>
+              ctx.p1DataIndex <= seqWindowEndYear ? 2.5 : 1,
+            borderDash: (ctx: { p1DataIndex: number }) =>
+              ctx.p1DataIndex <= seqWindowEndYear ? [] : [3, 4],
+          },
         }] : []),
       ],
     },
@@ -138,7 +153,7 @@ onBeforeUnmount(() => chart?.destroy());
       <canvas ref="canvas"></canvas>
     </div>
     <p class="chart-note">
-      塗りつぶしは p10–p90 のレンジ。中央線は p50（中央値）。赤点線は取り崩し開始 5 年の累積実質リターンが下位 10% の単一パス（序盤悪化後に回復し全期間としては平均超えになるケースもある — これがシーケンスリスクの本質）。インフレ控除後の実質値で表示しています。
+      塗りつぶしは p10–p90 のレンジ。中央線は p50（中央値）。赤線は取り崩し開始 5 年の累積実質リターンが下位 10% の単一パスで、<strong>実線部分（最初の 5 年）がシーケンスリスクが顕在化する局面</strong>。点線部分は同一パスの参考延長（長期では回復するケースも多い）。インフレ控除後の実質値で表示。
     </p>
     <button type="button" class="debug-copy-btn" @click="copyDebugJson">{{ copyLabel }}</button>
   </div>

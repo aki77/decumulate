@@ -27,8 +27,8 @@ const HELP = {
     "上位 10% タイル（最も深いドローダウン側）。悲観シナリオで耐える必要がある含み損の目安。",
   maxDDp10:
     "下位 10% タイル（最も浅いドローダウン側）。順風シナリオでの下落幅。",
-  sequenceDepletion:
-    "取り崩し開始 5 年の累積実質リターンが下位 10% のパスで、資産が枯渇する年齢。シーケンスリスクの可視化指標。「枯渇なし」の場合、悲観的な序盤シナリオでも取り崩し期間を完走している。",
+  sequenceP10Ratio:
+    "取り崩し開始 5 年の累積実質リターンが下位 10% のパスで、5 年後の資産残高が取り崩し開始時と比べて何%か（実質値）。100% 未満なら序盤に資産が目減りしていることを示す。このパスが最終的に枯渇するかどうかはグラフの赤点線で確認できる。",
 } as const;
 
 const metrics = useMetrics(() => props.yearly, () => props.params);
@@ -79,8 +79,12 @@ const metrics = useMetrics(() => props.yearly, () => props.params);
         <div class="metric-value">{{ formatPercent(mc.maxDrawdownP10) }}</div>
       </div>
       <div class="metric">
-        <div class="metric-label">シーケンスリスク枯渇年齢<HelpIcon :text="HELP.sequenceDepletion" /></div>
-        <div class="metric-value">{{ mc.sequenceRiskDepletionAge !== null ? `${mc.sequenceRiskDepletionAge}歳` : "枯渇なし" }}</div>
+        <div class="metric-label">シーケンスp10：5年後資産比率<HelpIcon :text="HELP.sequenceP10Ratio" /></div>
+        <div class="metric-value">{{
+          mc.sequenceP10Diagnostics
+            ? formatPercent(mc.sequenceP10Diagnostics.totalAtSeqWindowEnd / mc.sequenceP10Diagnostics.baseTotalAtWithdrawalStart)
+            : "―"
+        }}</div>
       </div>
     </div>
   </section>
