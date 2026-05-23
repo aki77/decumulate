@@ -1,4 +1,5 @@
-export const toMan = (v: number) => v / 10000;
+export const MAN = 10000;
+export const toMan = (v: number) => v / MAN;
 
 export function formatMan(yen: number): string {
   if (!Number.isFinite(yen)) return "-";
@@ -6,10 +7,15 @@ export function formatMan(yen: number): string {
 }
 
 export function formatManValue(manValue: number): string {
-  return formatMan(manValue * 10000);
+  return formatMan(manValue * MAN);
 }
 
-export function formatPercent(v: number): string {
+export function formatPercent(v: number, digits = 1): string {
   if (!Number.isFinite(v)) return "-";
-  return `${(v * 100).toFixed(1)}%`;
+  return `${(v * 100).toFixed(digits)}%`;
+}
+
+export function formatNumber(v: number, digits = 1): string {
+  if (!Number.isFinite(v)) return "-";
+  return v.toFixed(digits);
 }

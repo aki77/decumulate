@@ -82,7 +82,12 @@ function handleExport() {
       <section class="panel results">
         <h2>結果</h2>
         <template v-if="result">
-          <ConditionSummary :state="state" @open="openDrawer" />
+          <ConditionSummary
+            :state="state"
+            :params="debouncedMcParams"
+            :result="result"
+            @open="openDrawer"
+          />
           <ScoreHero
             :score="result.score"
             :score-class-name="result.scoreInfo.className"

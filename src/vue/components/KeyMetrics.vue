@@ -2,6 +2,7 @@
 import HelpIcon from "./HelpIcon.vue";
 import { useMetrics } from "../composables/useMetrics.ts";
 import { formatMan, formatPercent } from "../format.ts";
+import { KEY_METRICS_HELP as HELP } from "../help-dict.ts";
 import type { YearlyProjection, CalculateParams } from "../../calculate.ts";
 import type { MonteCarloResult } from "../../monte-carlo.ts";
 
@@ -10,15 +11,6 @@ const props = defineProps<{
   mc: MonteCarloResult;
   params: CalculateParams;
 }>();
-
-const HELP = {
-  finalTotal: "シミュレーション最終年の名目資産（インフレ調整なし）。",
-  interest: "最終時点の元本超過分（運用益）。非課税口座でない場合は税金控除済み。",
-  totalWithdrawn: "取り崩し期間中に引き出した金額の合計（名目値）。",
-  mcP50: "モンテカルロ 5,000 試行の最終資産分布の中央値。インフレ控除後の購買力ベース。",
-  depletion: "取り崩し期間中に資産がゼロになる試行の割合。",
-  failure: "最終資産が積立元本合計を下回る試行の割合。",
-} as const;
 
 const metrics = useMetrics(() => props.yearly, () => props.params);
 </script>
