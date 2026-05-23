@@ -2,7 +2,23 @@ import { watchDebounced } from "@vueuse/core";
 import type { OtherIncomeEntry } from "../../other-income.ts";
 import type { ParamsState, WithdrawalLimitStepInput } from "./useParams.ts";
 
-const STORAGE_KEY = "decumulate:inputs:v8";
+const STORAGE_KEY = "decumulate:inputs";
+const LEGACY_V8_KEY = "decumulate:inputs:v8";
+
+export const CURRENT_VERSION = 8 as const;
+
+export interface Migration {
+  from: number;
+  to: number;
+  migrate: (data: any) => any;
+}
+
+export const MIGRATIONS: readonly Migration[] = [];
+
+export interface StoragePayload {
+  version: number;
+  data: unknown;
+}
 
 type StoredState = Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps"> & {
   otherIncomes: OtherIncomeEntry[];
@@ -32,81 +48,126 @@ function isWithdrawalLimitStep(v: unknown): v is WithdrawalLimitStepInput {
   );
 }
 
-function parseStoredData(raw: string): Partial<StoredState> | null {
-  try {
-    const data = JSON.parse(raw) as Record<string, unknown>;
-    if (!data || typeof data !== "object") return null;
+export function parseStoredState(data: unknown): Partial<StoredState> | null {
+  if (!data || typeof data !== "object") return null;
+  const src = data as Record<string, unknown>;
+  const result: Partial<StoredState> = {};
 
-    const result: Partial<StoredState> = {};
+  const numFields = [
+    "currentAge",
+    "initialNisaMan", "initialNisaGainMan", "initialTaxableRiskMan",
+    "initialTaxableRiskGainMan", "initialDefenseMan", "initialDefenseGainMan",
+    "nisaInitialLifetimeUsedMan", "monthlyContributionMan", "annualReturnRate",
+    "expenseRatio", "inflationRate", "volatility", "contributionYears",
+    "withdrawalStartYear", "withdrawalYears", "fixedMonthlyWithdrawalMan",
+    "withdrawalRate",
+    "basePensionMan", "pensionStartAge", "defenseAnnualReturnRate", "defenseVolatility",
+    "targetDefenseRatioStartPercent", "targetDefenseRatioEndPercent", "glidePathEndAge",
+    "drawdownThresholdPercent", "rebalanceThresholdPoint",
+    "initialIdecoMan", "initialIdecoGainMan", "idecoMonthlyContributionMan",
+    "idecoContributionYears", "idecoReceiveStartAge", "idecoLumpSumRatio", "idecoPensionYears",
+    "guardrailUpperPercent", "guardrailLowerPercent", "guardrailAdjustmentPercent",
+    "finalTargetMan",
+    "minMonthlyWithdrawalMan", "slowGoStartAge", "noGoStartAge",
+    "slowGoCoefPercent",
+  ] as const;
 
-    const numFields = [
-      "currentAge",
-      "initialNisaMan", "initialNisaGainMan", "initialTaxableRiskMan",
-      "initialTaxableRiskGainMan", "initialDefenseMan", "initialDefenseGainMan",
-      "nisaInitialLifetimeUsedMan", "monthlyContributionMan", "annualReturnRate",
-      "expenseRatio", "inflationRate", "volatility", "contributionYears",
-      "withdrawalStartYear", "withdrawalYears", "fixedMonthlyWithdrawalMan",
-      "withdrawalRate",
-      "basePensionMan", "pensionStartAge", "defenseAnnualReturnRate", "defenseVolatility",
-      "targetDefenseRatioStartPercent", "targetDefenseRatioEndPercent", "glidePathEndAge",
-      "drawdownThresholdPercent", "rebalanceThresholdPoint",
-      "initialIdecoMan", "initialIdecoGainMan", "idecoMonthlyContributionMan",
-      "idecoContributionYears", "idecoReceiveStartAge", "idecoLumpSumRatio", "idecoPensionYears",
-      "guardrailUpperPercent", "guardrailLowerPercent", "guardrailAdjustmentPercent",
-      "finalTargetMan",
-      "minMonthlyWithdrawalMan", "slowGoStartAge", "noGoStartAge",
-      "slowGoCoefPercent",
-    ] as const;
+  const boolFields = [
+    "isCoupled", "nisaTransferEnabled", "inflationAdjustedWithdrawal",
+    "defensePriorityOnDrawdown", "skipRebalanceOnDrawdown", "idecoEnabled",
+  ] as const;
 
-    const boolFields = [
-      "isCoupled", "nisaTransferEnabled", "inflationAdjustedWithdrawal",
-      "defensePriorityOnDrawdown", "skipRebalanceOnDrawdown", "idecoEnabled",
-    ] as const;
+  const strFields = ["productPreset", "defenseProductPreset", "withdrawalMode"] as const;
 
-    const strFields = ["productPreset", "defenseProductPreset", "withdrawalMode"] as const;
-
-    for (const key of numFields) {
-      const v = data[key];
-      if (typeof v === "number" && Number.isFinite(v)) {
-        (result as Record<string, unknown>)[key] = v;
-      }
+  for (const key of numFields) {
+    const v = src[key];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      (result as Record<string, unknown>)[key] = v;
     }
-
-    for (const key of boolFields) {
-      const v = data[key];
-      if (typeof v === "boolean") (result as Record<string, unknown>)[key] = v;
-    }
-
-    for (const key of strFields) {
-      const v = data[key];
-      if (typeof v === "string") (result as Record<string, unknown>)[key] = v;
-    }
-
-    const rawOi = data["otherIncomes"];
-    if (Array.isArray(rawOi)) {
-      result.otherIncomes = rawOi.filter(isOtherIncomeEntry);
-    }
-
-    const rawSteps = data["withdrawalLimitSteps"];
-    if (Array.isArray(rawSteps)) {
-      const filtered = rawSteps.filter(isWithdrawalLimitStep);
-      // 終端行（untilAge=null）が無い壊れデータからは復元しない（デフォルトに任せる）
-      if (filtered.some((s) => s.untilAge === null)) {
-        result.withdrawalLimitSteps = filtered;
-      }
-    }
-
-    return result;
-  } catch {
-    return null;
   }
+
+  for (const key of boolFields) {
+    const v = src[key];
+    if (typeof v === "boolean") (result as Record<string, unknown>)[key] = v;
+  }
+
+  for (const key of strFields) {
+    const v = src[key];
+    if (typeof v === "string") (result as Record<string, unknown>)[key] = v;
+  }
+
+  const rawOi = src["otherIncomes"];
+  if (Array.isArray(rawOi)) {
+    result.otherIncomes = rawOi.filter(isOtherIncomeEntry);
+  }
+
+  const rawSteps = src["withdrawalLimitSteps"];
+  if (Array.isArray(rawSteps)) {
+    const filtered = rawSteps.filter(isWithdrawalLimitStep);
+    // 終端行（untilAge=null）が無い壊れデータからは復元しない（デフォルトに任せる）
+    if (filtered.some((s) => s.untilAge === null)) {
+      result.withdrawalLimitSteps = filtered;
+    }
+  }
+
+  return result;
+}
+
+export function asStoragePayload(parsed: unknown): StoragePayload | null {
+  if (!parsed || typeof parsed !== "object") return null;
+  const o = parsed as Record<string, unknown>;
+  if (typeof o["version"] !== "number" || !Number.isFinite(o["version"])) return null;
+  if (!("data" in o)) return null;
+  return { version: o["version"] as number, data: o["data"] };
+}
+
+export function migrateWith(
+  payload: StoragePayload,
+  migrations: readonly Migration[],
+  currentVersion: number,
+): Partial<StoredState> | null {
+  let version = payload.version;
+  let data = payload.data;
+
+  if (version > currentVersion) return null;
+
+  while (version < currentVersion) {
+    const m = migrations.find((mig) => mig.from === version);
+    if (!m) return null;
+    data = m.migrate(data);
+    version = m.to;
+  }
+
+  return parseStoredState(data);
+}
+
+function migrateToCurrent(payload: StoragePayload): Partial<StoredState> | null {
+  return migrateWith(payload, MIGRATIONS, CURRENT_VERSION);
+}
+
+function migrateLegacyV8KeyIfNeeded(): void {
+  try {
+    if (localStorage.getItem(STORAGE_KEY) !== null) return;
+    const legacy = localStorage.getItem(LEGACY_V8_KEY);
+    if (!legacy) return;
+    const data = JSON.parse(legacy);
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: 8, data }),
+    );
+    localStorage.removeItem(LEGACY_V8_KEY);
+  } catch {}
 }
 
 function loadFromStorage(): Partial<StoredState> | null {
   try {
+    migrateLegacyV8KeyIfNeeded();
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return parseStoredData(raw);
+    const parsed = JSON.parse(raw) as unknown;
+    const payload = asStoragePayload(parsed);
+    if (!payload) return null;
+    return migrateToCurrent(payload);
   } catch {
     return null;
   }
@@ -114,7 +175,8 @@ function loadFromStorage(): Partial<StoredState> | null {
 
 function saveToStorage(state: ParamsState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const payload: StoragePayload = { version: CURRENT_VERSION, data: state };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch {}
 }
 
@@ -140,14 +202,22 @@ export function useStorage(state: ParamsState) {
   }
 
   function exportData(): string {
-    return JSON.stringify(state);
+    const payload: StoragePayload = { version: CURRENT_VERSION, data: state };
+    return JSON.stringify(payload, null, 2);
   }
 
   function importData(raw: string): boolean {
-    const parsed = parseStoredData(raw);
-    if (!parsed) return false;
-    Object.assign(state, parsed);
-    return true;
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      const payload = asStoragePayload(parsed);
+      if (!payload) return false;
+      const migrated = migrateToCurrent(payload);
+      if (!migrated) return false;
+      Object.assign(state, migrated);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   return { load, reset, startAutoSave, exportData, importData };
