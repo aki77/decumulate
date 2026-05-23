@@ -7,6 +7,10 @@ import type { SimulatorResult } from "../composables/useSimulator.ts";
 import { withdrawalLabel as buildWithdrawalLabel } from "../withdrawal-label.ts";
 import { buildMarkdownReport } from "../markdown-export.ts";
 import { computeMetrics } from "../composables/useMetrics.ts";
+import HelpIcon from "./HelpIcon.vue";
+
+const COPY_HELP =
+  "入力条件・主要メトリクス・モンテカルロ年次推移を Markdown 形式でクリップボードにコピーします。ChatGPT や Claude などの LLM チャットに貼り付けて、FP や日本の個人金融制度の専門家にシミュレーション結果の妥当性検証や改善案を相談する用途で使えます。";
 
 const props = defineProps<{
   state: ParamsState;
@@ -59,12 +63,15 @@ async function handleCopy() {
       <span class="chip">初期 NISA{{ state.initialNisaMan }}+特定{{ state.initialTaxableRiskMan }}+防衛{{ state.initialDefenseMan }}万</span>
       <span v-if="state.basePensionMan > 0" class="chip">年金 {{ state.pensionStartAge }}歳〜 月{{ state.basePensionMan }}万</span>
     </button>
-    <button
-      type="button"
-      class="copy-btn"
-      :class="{ 'copy-btn-ok': copyState === 'ok', 'copy-btn-err': copyState === 'err' }"
-      @click="handleCopy"
-    >{{ copyButtonLabel }}</button>
+    <div class="copy-btn-wrap">
+      <button
+        type="button"
+        class="copy-btn"
+        :class="{ 'copy-btn-ok': copyState === 'ok', 'copy-btn-err': copyState === 'err' }"
+        @click="handleCopy"
+      >{{ copyButtonLabel }}</button>
+      <HelpIcon :text="COPY_HELP" />
+    </div>
   </div>
 </template>
 
@@ -102,9 +109,14 @@ async function handleCopy() {
   font-size: 12px;
 }
 
-.copy-btn {
+.copy-btn-wrap {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
   align-self: flex-start;
+}
+
+.copy-btn {
   padding: 8px 14px;
   border: 1px solid var(--accent);
   color: var(--accent);
