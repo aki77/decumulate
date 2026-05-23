@@ -15,6 +15,7 @@ const MODE_DESCRIPTION: Record<WithdrawalMode, string> = {
   rate: "リスクサイド基準で定率",
   "rate-risk": "リスクサイド時価基準で毎月再計算",
   "rate-guardrail": "ガイトン＝クリンガー（ガードレール）",
+  "zero-landing": "DIE WITH ZERO（ゼロ着地）：定額取り崩しを想定寿命時の目標残高から逆算",
 };
 
 // 5年刻み + 取崩開始/終了・積立終了・iDeCo受取開始・年金開始 を抽出。

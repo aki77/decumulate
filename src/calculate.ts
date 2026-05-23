@@ -39,7 +39,7 @@ export interface CalculateParams {
   withdrawalYears: number;
 
   // 取り崩し
-  withdrawalMode: "amount" | "rate" | "rate-risk" | "rate-guardrail";
+  withdrawalMode: "amount" | "rate" | "rate-risk" | "rate-guardrail" | "zero-landing";
   fixedMonthlyWithdrawal: number;
   withdrawalRate: number;
   guardrailUpperPercent: number;
@@ -520,6 +520,8 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
   let rateWithdrawalBasis: number | null = null;
   const isGuardrailMode = withdrawalMode === "rate-guardrail";
   const isAnyRateMode = withdrawalMode === "rate" || withdrawalMode === "rate-risk" || isGuardrailMode;
+  const isZeroLanding = withdrawalMode === "zero-landing";
+  const isClampActive = isAnyRateMode || isZeroLanding;
   // 決定論版は名目値計算のため、年率モードの下限/上限を毎年初に *=(1+ri) して実質購買力を一定に保つ。
   // schedule は実質値で受け取り、ローカルに名目コピーを保持して年初に名目化する。
   const nominalLimitSchedule: WithdrawalLimitStep[] = withdrawalLimitSchedule.map((s) => ({
@@ -729,7 +731,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
           }
         }
 
-        if (isAnyRateMode) {
+        if (isClampActive) {
           baseWithdrawal = clampToBounds(baseWithdrawal, floorThisYear, ceilingThisYear);
         }
 

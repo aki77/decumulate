@@ -11,7 +11,11 @@ import InputWithdrawal from "./InputWithdrawal.vue";
 import InputIdeco from "./InputIdeco.vue";
 import InputPension from "./InputPension.vue";
 
-const props = defineProps<{ open: boolean; isComputingSwr: boolean }>();
+const props = defineProps<{
+  open: boolean;
+  isComputingSwr: boolean;
+  isComputingZeroLanding: boolean;
+}>();
 const emit = defineEmits<{
   close: [];
   applyProductPreset: [key: string];
@@ -21,6 +25,7 @@ const emit = defineEmits<{
   addLimitStep: [];
   removeLimitStep: [idx: number];
   requestSwr: [];
+  requestZeroLanding: [];
   reset: [];
   export: [];
   import: [data: string];
@@ -80,9 +85,11 @@ watch(
             <InputWithdrawal
               v-model="state"
               :is-computing-swr="props.isComputingSwr"
+              :is-computing-zero-landing="props.isComputingZeroLanding"
               @add-limit-step="emit('addLimitStep')"
               @remove-limit-step="emit('removeLimitStep', $event)"
               @request-swr="emit('requestSwr')"
+              @request-zero-landing="emit('requestZeroLanding')"
             />
             <InputIdeco v-model="state" />
             <InputPension

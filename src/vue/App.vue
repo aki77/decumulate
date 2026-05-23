@@ -13,7 +13,20 @@ import CompoundChart from "./components/CompoundChart.vue";
 import MonteCarloChart from "./components/MonteCarloChart.vue";
 import MonthlyDetails from "./components/MonthlyDetails.vue";
 
-const { state, debouncedMcParams, applyProductPreset, applyDefensePreset, addOtherIncome, removeOtherIncome, addLimitStep, removeLimitStep, isComputingSwr, runSwrSearch } = useParams();
+const {
+  state,
+  debouncedMcParams,
+  applyProductPreset,
+  applyDefensePreset,
+  addOtherIncome,
+  removeOtherIncome,
+  addLimitStep,
+  removeLimitStep,
+  isComputingSwr,
+  runSwrSearch,
+  isComputingZeroLanding,
+  runZeroLandingSolver,
+} = useParams();
 const storage = useStorage(state);
 const { result } = useSimulator(debouncedMcParams);
 
@@ -102,6 +115,7 @@ function handleExport() {
             :yearly="result.yearly"
             :mc="result.mc"
             :params="debouncedMcParams"
+            :final-target-yen="state.finalTargetMan * 10000"
           />
           <CompoundChart :projections="result.yearly" :params="debouncedMcParams" />
           <MonteCarloChart :mc="result.mc" :params="debouncedMcParams" />
@@ -114,6 +128,7 @@ function handleExport() {
     <InputDrawer
       :open="drawerOpen"
       :is-computing-swr="isComputingSwr"
+      :is-computing-zero-landing="isComputingZeroLanding"
       v-model="state"
       @close="closeDrawer"
       @apply-product-preset="applyProductPreset"
@@ -123,6 +138,7 @@ function handleExport() {
       @add-limit-step="addLimitStep"
       @remove-limit-step="removeLimitStep"
       @request-swr="runSwrSearch"
+      @request-zero-landing="runZeroLandingSolver"
       @reset="handleReset"
       @export="handleExport"
       @import="storage.importData"

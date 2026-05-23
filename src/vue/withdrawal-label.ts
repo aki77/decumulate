@@ -16,5 +16,7 @@ export function withdrawalLabel(state: WithdrawalLabelInput): string {
       return `定率×リスク ${state.withdrawalRate}%`;
     case "rate-guardrail":
       return `GKガードレール ${state.withdrawalRate}%`;
+    case "zero-landing":
+      return `DIE WITH ZERO 月${state.fixedMonthlyWithdrawalMan}万`;
   }
 }

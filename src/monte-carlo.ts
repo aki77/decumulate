@@ -195,6 +195,8 @@ export function simulateMonteCarlo(
   const isRateRiskMode = withdrawalMode === "rate-risk";
   const isGuardrailMode = withdrawalMode === "rate-guardrail";
   const isAnyRateMode = isRateMode || isRateRiskMode || isGuardrailMode;
+  const isZeroLanding = withdrawalMode === "zero-landing";
+  const isClampActive = isAnyRateMode || isZeroLanding;
   const guardrailUpper = isGuardrailMode ? (withdrawalRate / 100) * (1 + guardrailUpperPercent / 100) : 0;
   const guardrailLower = isGuardrailMode ? (withdrawalRate / 100) * (1 - guardrailLowerPercent / 100) : 0;
   const guardrailAdjUp = isGuardrailMode ? 1 + guardrailAdjustmentPercent / 100 : 1;
@@ -677,7 +679,7 @@ export function simulateMonteCarlo(
             baseWithdrawal = currentMonthlyWithdrawal[i]!;
           }
 
-          if (isAnyRateMode) {
+          if (isClampActive) {
             const floorThisYear = floorByYear[year]!;
             const ceilingThisYear = ceilingByYear[year]!;
             if (baseWithdrawal < floorThisYear) baseWithdrawal = floorThisYear;

@@ -1,11 +1,17 @@
-import { reactive, computed, ref } from "vue";
+import { reactive, computed, ref, watch } from "vue";
 import { refDebounced } from "@vueuse/core";
 import { normalizeOtherIncomes, type OtherIncomeEntry } from "../../other-income.ts";
 import type { WithdrawalLimitStep } from "../../calculate.ts";
 import type { MonteCarloParams } from "../../monte-carlo.ts";
 import { findSafeWithdrawalRate, type SwrSearchResult } from "../../swr.ts";
+import {
+  buildZeroLandingSchedule,
+  findZeroLandingMonthly,
+  type ZeroLandingCurve,
+  type ZeroLandingResult,
+} from "../../zero-landing.ts";
 
-export type WithdrawalMode = "amount" | "rate" | "rate-risk" | "rate-guardrail";
+export type WithdrawalMode = "amount" | "rate" | "rate-risk" | "rate-guardrail" | "zero-landing";
 
 // UI 入力用の年齢ステップ。万円・年齢入力。末尾の 1 行は untilAge=null（「以降」）。
 export interface WithdrawalLimitStepInput {
@@ -93,6 +99,11 @@ export interface ParamsState {
   guardrailUpperPercent: number;
   guardrailLowerPercent: number;
   guardrailAdjustmentPercent: number;
+  finalTargetMan: number;
+  minMonthlyWithdrawalMan: number;
+  slowGoStartAge: number;
+  noGoStartAge: number;
+  slowGoCoefPercent: number;
   otherIncomes: OtherIncomeEntry[];
 }
 
@@ -163,6 +174,11 @@ export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes" | "withdrawalLimit
   guardrailUpperPercent: 20,
   guardrailLowerPercent: 20,
   guardrailAdjustmentPercent: 10,
+  finalTargetMan: 0,
+  minMonthlyWithdrawalMan: 15,
+  slowGoStartAge: 75,
+  noGoStartAge: 85,
+  slowGoCoefPercent: 80,
   otherIncomes: [],
 };
 
@@ -190,6 +206,15 @@ function normalizeLimitSteps(steps: WithdrawalLimitStepInput[]): WithdrawalLimit
     .filter((s): s is WithdrawalLimitStepInput & { untilAge: number } => s.untilAge !== null)
     .sort((a, b) => a.untilAge - b.untilAge);
   return [...finite.map(toLimitStep), toLimitStep({ ...terminal, untilAge: null })];
+}
+
+function extractZeroLandingCurve(state: ParamsState): ZeroLandingCurve {
+  return {
+    slowGoStartAge: state.slowGoStartAge,
+    noGoStartAge: state.noGoStartAge,
+    slowGoCoef: state.slowGoCoefPercent / 100,
+    noGoMonthly: state.minMonthlyWithdrawalMan * MAN,
+  };
 }
 
 export function useParams() {
@@ -222,7 +247,10 @@ export function useParams() {
       withdrawalMode: state.withdrawalMode,
       fixedMonthlyWithdrawal: state.fixedMonthlyWithdrawalMan * MAN,
       withdrawalRate: state.withdrawalRate,
-      withdrawalLimitSchedule: normalizeLimitSteps(state.withdrawalLimitSteps),
+      withdrawalLimitSchedule:
+        state.withdrawalMode === "zero-landing"
+          ? buildZeroLandingSchedule(state.fixedMonthlyWithdrawalMan * MAN, extractZeroLandingCurve(state))
+          : normalizeLimitSteps(state.withdrawalLimitSteps),
       inflationAdjustedWithdrawal: state.inflationAdjustedWithdrawal,
       basePension: state.basePensionMan * MAN,
       pensionStartAge: state.pensionStartAge,
@@ -319,6 +347,39 @@ export function useParams() {
     }
   }
 
+  const isComputingZeroLanding = ref(false);
+
+  // zero-landing モードはソルバーが inflationAdjustedWithdrawal=true を前提に逆算する。
+  // UI と計算の食い違いを避けるため、モード切替時に state 側を真に揃える（チェックボックスは disabled 表示）。
+  watch(
+    () => state.withdrawalMode,
+    (mode) => {
+      if (mode === "zero-landing" && !state.inflationAdjustedWithdrawal) {
+        state.inflationAdjustedWithdrawal = true;
+      }
+    },
+    { immediate: true },
+  );
+
+  async function runZeroLandingSolver(): Promise<ZeroLandingResult> {
+    if (isComputingZeroLanding.value) throw new Error("Zero-landing solver already running");
+    isComputingZeroLanding.value = true;
+    await new Promise<void>((r) => setTimeout(r, 0));
+    try {
+      const result = findZeroLandingMonthly(mcParams.value, {
+        finalTarget: state.finalTargetMan * MAN,
+        curve: extractZeroLandingCurve(state),
+      });
+      if (result.boundary === "found") {
+        // 探索精度 1000 円を維持するため 0.1 万円単位で丸める。
+        state.fixedMonthlyWithdrawalMan = Math.round(result.monthlyAmount / 1000) / 10;
+      }
+      return result;
+    } finally {
+      isComputingZeroLanding.value = false;
+    }
+  }
+
   return {
     state,
     debouncedMcParams,
@@ -330,6 +391,8 @@ export function useParams() {
     removeLimitStep,
     isComputingSwr,
     runSwrSearch,
+    isComputingZeroLanding,
+    runZeroLandingSolver,
     MAN,
   };
 }

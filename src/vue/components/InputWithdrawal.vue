@@ -8,12 +8,7 @@ const state = defineModel<ParamsState>({ required: true });
 
 defineProps<{
   isComputingSwr: boolean;
-}>();
-
-defineEmits<{
-  addLimitStep: [];
-  removeLimitStep: [idx: number];
-  requestSwr: [];
+  isComputingZeroLanding: boolean;
 }>();
 
 const isRateMode = computed(
@@ -23,6 +18,17 @@ const isRateMode = computed(
     state.value.withdrawalMode === "rate-guardrail",
 );
 const isGuardrailMode = computed(() => state.value.withdrawalMode === "rate-guardrail");
+const isDieWithZero = computed(() => state.value.withdrawalMode === "zero-landing");
+const lifeExpectancyAge = computed(
+  () => state.value.currentAge + state.value.withdrawalStartYear + state.value.withdrawalYears,
+);
+
+defineEmits<{
+  addLimitStep: [];
+  removeLimitStep: [idx: number];
+  requestSwr: [];
+  requestZeroLanding: [];
+}>();
 </script>
 
 <template>
@@ -38,14 +44,78 @@ const isGuardrailMode = computed(() => state.value.withdrawalMode === "rate-guar
         <option value="rate">年率（%）で指定（Trinity Study）</option>
         <option value="rate-risk">年率（%）×リスク資産で毎年再評価</option>
         <option value="rate-guardrail">年率（%）Guyton-Klinger ガードレール</option>
+        <option value="zero-landing">DIE WITH ZERO（ゼロ着地）</option>
       </select>
     </div>
-    <div v-if="!isRateMode" class="field">
+    <div v-if="isDieWithZero" class="die-with-zero-info">
+      想定寿命 = {{ lifeExpectancyAge }} 歳
+      <span class="hint-aside">（現在年齢 + 切崩開始 + 切崩年数）</span>
+    </div>
+    <div v-if="!isRateMode && !isDieWithZero" class="field">
       <label for="fixedMonthlyWithdrawal">月額生活費（万円）</label>
       <InputNumber id="fixedMonthlyWithdrawal" v-model="state.fixedMonthlyWithdrawalMan" min="0" step="1" />
     </div>
-    <template v-if="isRateMode">
+    <template v-if="isDieWithZero">
       <div class="field">
+        <label for="fixedMonthlyWithdrawal">
+          Go-Go 期月額（万円）
+          <HelpIcon text="アクティブに使う Go-Go 期（〜Slow-Go 開始年齢 -1 歳）の月額。「ゼロ着地」ボタンで、床と最終残高目標を制約として、想定寿命時に目標残高に着地する Go-Go 月額を二分探索で逆算します。Slow-Go 月額 = Go-Go × 係数、No-Go 月額 = 床（下のフィールド）。" />
+        </label>
+        <div class="rate-with-button">
+          <InputNumber id="fixedMonthlyWithdrawal" v-model="state.fixedMonthlyWithdrawalMan" min="0" step="1" />
+          <button
+            type="button"
+            class="auto-calc-btn"
+            :disabled="isComputingZeroLanding"
+            @click="$emit('requestZeroLanding')"
+          >
+            {{ isComputingZeroLanding ? "計算中…" : "ゼロ着地" }}
+          </button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="minMonthlyWithdrawal">
+          最低月額（No-Go 期の床、万円）
+          <HelpIcon text="No-Go 期（高齢で支出が減るフェーズ）に最低限確保したい月額。Go-Go 月額に対する係数ではなく、ユーザが独立して指定する固定値。床が高すぎると Go-Go 月額が下げられず「ゼロ着地」が達成不能になる場合があります。" />
+        </label>
+        <InputNumber id="minMonthlyWithdrawal" v-model="state.minMonthlyWithdrawalMan" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label for="finalTarget">
+          最終残高目標（万円）
+          <HelpIcon text="想定寿命時に残しておきたい資産。0 なら純粋な DIE WITH ZERO。生前贈与しきれない遺産や葬式代等を見込むなら数百万〜数千万を入力。" />
+        </label>
+        <InputNumber id="finalTarget" v-model="state.finalTargetMan" min="0" step="100" />
+      </div>
+      <details class="curve-details">
+        <summary>カーブ詳細設定</summary>
+        <div class="curve-fields">
+          <div class="field">
+            <label for="slowGoStartAge">
+              Slow-Go 期開始年齢
+              <HelpIcon text="Slow-Go 期（Go-Go × 係数）の開始年齢。既定 75 歳。この歳以降は月額が係数倍に下がる。" />
+            </label>
+            <InputNumber id="slowGoStartAge" v-model="state.slowGoStartAge" min="50" max="120" step="1" />
+          </div>
+          <div class="field">
+            <label for="noGoStartAge">
+              No-Go 期開始年齢
+              <HelpIcon text="No-Go 期（床固定）の開始年齢。既定 85 歳。この歳以降は最低月額（床）に張り付く。" />
+            </label>
+            <InputNumber id="noGoStartAge" v-model="state.noGoStartAge" min="50" max="120" step="1" />
+          </div>
+          <div class="field">
+            <label for="slowGoCoefPercent">
+              Slow-Go 係数（%）
+              <HelpIcon text="Slow-Go 月額 ÷ Go-Go 月額。既定 80%。70〜80% が DIE WITH ZERO の標準。" />
+            </label>
+            <InputNumber id="slowGoCoefPercent" v-model="state.slowGoCoefPercent" min="0" max="100" step="1" />
+          </div>
+        </div>
+      </details>
+    </template>
+    <template v-if="isRateMode">
+      <div v-if="isRateMode" class="field">
         <label for="withdrawalRate">
           年間引出率（%）
           <HelpIcon text="年あたりの引出割合。Trinity Study モードでは取り崩し開始時の総資産に対する率（4%が目安）。リスク資産モードでは毎年初時点のリスク資産に対する率。「自動算出」ボタンで、成功率95%（取り崩し終了時に資産が枯渇しない確率）を満たす最大の引出率を二分探索で求められます。" />
@@ -130,9 +200,20 @@ const isGuardrailMode = computed(() => state.value.withdrawalMode === "rate-guar
       </div>
     </template>
     <div v-if="!isRateMode" class="field checkbox-field">
-      <input id="inflationAdjustedWithdrawal" v-model="state.inflationAdjustedWithdrawal" type="checkbox" />
+      <input
+        id="inflationAdjustedWithdrawal"
+        v-model="state.inflationAdjustedWithdrawal"
+        type="checkbox"
+        :disabled="isDieWithZero"
+      />
       <label for="inflationAdjustedWithdrawal">月額をインフレに連動させる</label>
-      <HelpIcon text="インフレ率の分だけ毎年引出額を増やし、実質購買力を維持する。" />
+      <HelpIcon
+        :text="
+          isDieWithZero
+            ? 'ゼロ着地モードではソルバーがインフレ連動前提で月額を逆算するため、強制 ON です。'
+            : 'インフレ率の分だけ毎年引出額を増やし、実質購買力を維持する。'
+        "
+      />
     </div>
   </div>
 </template>
@@ -249,5 +330,42 @@ const isGuardrailMode = computed(() => state.value.withdrawalMode === "rate-guar
 .auto-calc-btn:disabled {
   opacity: 0.6;
   cursor: progress;
+}
+
+.die-with-zero-info {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: var(--surface-2, rgba(0, 0, 0, 0.03));
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.die-with-zero-info .hint-aside {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.curve-details {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
+.curve-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  user-select: none;
+}
+
+.curve-fields {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 </style>
