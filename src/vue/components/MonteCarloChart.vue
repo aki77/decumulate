@@ -2,6 +2,7 @@
 import { ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { Chart } from "chart.js";
 import { ensureChartRegistered } from "../composables/useChartJs.ts";
+import { buildPhaseAnnotations } from "../composables/phaseAnnotations.ts";
 import { toMan, formatManValue } from "../format.ts";
 import { NUM_SIMULATIONS } from "../../monte-carlo.ts";
 import type { MonteCarloResult, MonteCarloParams } from "../../monte-carlo.ts";
@@ -61,20 +62,35 @@ function buildChart(): void {
   const p75Cum = mc.yearly.map((y) => toMan(y.p75));
   const p90Cum = mc.yearly.map((y) => toMan(y.p90));
 
-  let sequenceYearly: number[] | null = null;
-  // seqWindowEndYear: 取り崩し開始年 + ウィンドウ年数（境界は年単位で丸める）
+  let sequenceYearly: (number | null)[] | null = null;
   const seqWindowYears = mc.sequenceP10Diagnostics
     ? Math.ceil(mc.sequenceP10Diagnostics.seqWindowMonths / 12)
     : 5;
   const seqWindowEndYear = params.withdrawalStartYear + seqWindowYears;
 
   if (mc.sequenceP10Monthly.length > 0) {
-    sequenceYearly = [toMan(mc.yearly[0]!.p50)];
-    for (let y = 1; y < mc.yearly.length; y++) {
-      const idx = y * 12 - 1;
-      sequenceYearly.push(idx < mc.sequenceP10Monthly.length ? toMan(mc.sequenceP10Monthly[idx]!.total) : 0);
+    sequenceYearly = [];
+    for (let y = 0; y < mc.yearly.length; y++) {
+      if (y < params.withdrawalStartYear) {
+        sequenceYearly.push(null);
+      } else if (y === params.withdrawalStartYear) {
+        sequenceYearly.push(toMan(mc.yearly[y]!.p50));
+      } else {
+        const idx = y * 12 - 1;
+        sequenceYearly.push(
+          idx < mc.sequenceP10Monthly.length
+            ? toMan(mc.sequenceP10Monthly[idx]!.total)
+            : null,
+        );
+      }
     }
   }
+
+  const annotations = buildPhaseAnnotations({
+    contributionYears: params.contributionYears,
+    withdrawalStartYear: params.withdrawalStartYear,
+    maxYear: mc.yearly.length - 1,
+  });
 
   chart = new Chart(canvas.value, {
     type: "line",
@@ -136,6 +152,7 @@ function buildChart(): void {
         tooltip: {
           callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatManValue(ctx.parsed.y as number)}` },
         },
+        annotation: { annotations } as never,
       },
     },
   });

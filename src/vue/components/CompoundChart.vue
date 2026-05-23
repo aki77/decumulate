@@ -2,6 +2,8 @@
 import { ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { Chart } from "chart.js";
 import { ensureChartRegistered } from "../composables/useChartJs.ts";
+import { buildPhaseAnnotations } from "../composables/phaseAnnotations.ts";
+import { toMan, formatManValue } from "../format.ts";
 import type { YearlyProjection } from "../../calculate.ts";
 import type { CalculateParams } from "../../calculate.ts";
 
@@ -15,13 +17,6 @@ const props = defineProps<{
 const canvas = ref<HTMLCanvasElement | null>(null);
 let chart: Chart | null = null;
 
-const toMan = (v: number) => v / 10000;
-
-function formatManValue(manValue: number): string {
-  if (!Number.isFinite(manValue)) return "-";
-  return `${Math.round(manValue).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}万円`;
-}
-
 function buildChart(): void {
   if (!canvas.value) return;
   chart?.destroy();
@@ -31,29 +26,11 @@ function buildChart(): void {
   const principal = projections.map((p) => toMan(p.principal));
   const interest = projections.map((p) => toMan(p.interest));
 
-  const annotations: Record<string, unknown> = {};
-  if (params.contributionYears > 0 && params.contributionYears <= projections.length - 1) {
-    annotations["contribEnd"] = {
-      type: "line",
-      xMin: params.contributionYears,
-      xMax: params.contributionYears,
-      borderColor: "rgba(34, 197, 94, 0.6)",
-      borderWidth: 2,
-      borderDash: [6, 6],
-      label: { display: true, content: "積立終了", position: "start" },
-    };
-  }
-  if (params.withdrawalStartYear > 0 && params.withdrawalStartYear <= projections.length - 1) {
-    annotations["withdrawStart"] = {
-      type: "line",
-      xMin: params.withdrawalStartYear,
-      xMax: params.withdrawalStartYear,
-      borderColor: "rgba(239, 68, 68, 0.6)",
-      borderWidth: 2,
-      borderDash: [6, 6],
-      label: { display: true, content: "切崩開始", position: "start" },
-    };
-  }
+  const annotations = buildPhaseAnnotations({
+    contributionYears: params.contributionYears,
+    withdrawalStartYear: params.withdrawalStartYear,
+    maxYear: projections.length - 1,
+  });
 
   chart = new Chart(canvas.value, {
     type: "line",
