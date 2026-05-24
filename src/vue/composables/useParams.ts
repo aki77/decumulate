@@ -331,6 +331,7 @@ export interface ParamsState {
   slowGoStartAge: number;
   noGoStartAge: number;
   slowGoCoefPercent: number;
+  enableJumpDiffusion: boolean;
   otherIncomes: OtherIncomeEntry[];
 }
 
@@ -406,6 +407,7 @@ export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes" | "withdrawalLimit
   slowGoStartAge: 75,
   noGoStartAge: 85,
   slowGoCoefPercent: 80,
+  enableJumpDiffusion: false,
   otherIncomes: [],
 };
 
@@ -503,6 +505,7 @@ export function useParams() {
         idecoLumpSumRatio: state.idecoLumpSumRatio / 100,
         idecoPensionYears: state.idecoPensionYears,
       },
+      enableJumpDiffusion: state.enableJumpDiffusion,
     };
   });
 

@@ -162,3 +162,16 @@ test("migrateWith - migrate が新フィールドを追加すると parseStoredS
   assert.ok(result);
   assert.strictEqual(result.finalTargetMan, 5000);
 });
+
+test("parseStoredState - enableJumpDiffusion: true を読み取る", () => {
+  const result = parseStoredState({ ...validV8Data, enableJumpDiffusion: true });
+  assert.strictEqual(result?.enableJumpDiffusion, true);
+});
+
+test("parseStoredState - enableJumpDiffusion が欠落しても他フィールドは復元される（旧データ互換）", () => {
+  const dataWithout = { ...validV8Data };
+  delete (dataWithout as any).enableJumpDiffusion;
+  const result = parseStoredState(dataWithout);
+  assert.ok(result);
+  assert.strictEqual(result.enableJumpDiffusion, undefined);
+});

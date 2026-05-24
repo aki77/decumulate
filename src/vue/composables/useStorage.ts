@@ -75,6 +75,7 @@ export function parseStoredState(data: unknown): Partial<StoredState> | null {
   const boolFields = [
     "isCoupled", "nisaTransferEnabled", "inflationAdjustedWithdrawal",
     "defensePriorityOnDrawdown", "skipRebalanceOnDrawdown", "idecoEnabled",
+    "enableJumpDiffusion",
   ] as const;
 
   const strFields = ["productPreset", "defenseProductPreset", "withdrawalMode"] as const;

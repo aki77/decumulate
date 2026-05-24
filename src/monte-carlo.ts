@@ -27,6 +27,16 @@ import {
 export const NUM_SIMULATIONS = 5000;
 export const SEED = 42;
 
+// Merton ジャンプ拡散パラメータ（固定定数）
+// λ=0.02: 50年に1回相当の頻度。中央値 exp(-0.40)≈-33% の急落。
+// 補償項は引かない設計のため期待リターンが約 -0.66%/年 下がる（UI ヘルプで明示）。
+const JD_LAMBDA_PER_YEAR = 0.02;
+const JD_LAMBDA_PER_MONTH = JD_LAMBDA_PER_YEAR / 12;
+const JD_MU_LOG = -0.40;
+const JD_SIGMA_LOG = 0.10;
+// Knuth法 Poisson サンプリング用閾値: λ が小さいため rng 1 回で判定でき高速
+const JD_NO_JUMP_THRESHOLD = Math.exp(-JD_LAMBDA_PER_MONTH);
+
 export interface MonteCarloParams extends CalculateParams {
   volatility: number;
   defenseVolatility: number;
@@ -36,6 +46,7 @@ export interface MonteCarloParams extends CalculateParams {
   // 「想定寿命時の残高がこの値以上で終わったパス」を達成と数える。円・実質値。
   // 未指定なら finalAchievementProbability は undefined を返す（zero-landing 以外のモードでは渡さない想定）。
   finalTarget?: number;
+  enableJumpDiffusion: boolean;
 }
 
 export interface MonteCarloYearly {
@@ -167,6 +178,7 @@ export function simulateMonteCarlo(
     guardrailLowerPercent,
     guardrailAdjustmentPercent,
     zeroLandingCurve,
+    enableJumpDiffusion,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
@@ -557,7 +569,16 @@ export function simulateMonteCarlo(
         const prevIdeco = useIdeco ? idecoPaths![i]! : 0;
 
         const zRisk = normalRandom(rng);
-        const riskGrow = Math.exp(monthlyDriftRisk + monthlySigmaRisk * zRisk);
+        let riskGrow = Math.exp(monthlyDriftRisk + monthlySigmaRisk * zRisk);
+        if (enableJumpDiffusion) {
+          let p = rng();
+          let logJumpSum = 0;
+          while (p > JD_NO_JUMP_THRESHOLD) {
+            logJumpSum += JD_MU_LOG + JD_SIGMA_LOG * normalRandom(rng);
+            p *= rng();
+          }
+          if (logJumpSum !== 0) riskGrow *= Math.exp(logJumpSum);
+        }
         nisaPaths[i]! *= riskGrow;
         taxablePaths[i]! *= riskGrow;
         let gainDefense = 0;

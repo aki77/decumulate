@@ -62,6 +62,7 @@ async function handleCopy() {
       <span class="chip">{{ withdrawalLabel }}</span>
       <span class="chip">初期 NISA{{ state.initialNisaMan }}+特定{{ state.initialTaxableRiskMan }}+防衛{{ state.initialDefenseMan }}万</span>
       <span v-if="state.basePensionMan > 0" class="chip">年金 {{ state.pensionStartAge }}歳〜 月{{ state.basePensionMan }}万</span>
+      <span v-if="state.enableJumpDiffusion" class="chip chip--warn">JDジャンプ有効</span>
     </button>
     <div class="copy-btn-wrap">
       <button
@@ -107,6 +108,11 @@ async function handleCopy() {
   background: var(--accent-soft, rgba(99, 102, 241, 0.12));
   color: var(--accent, #6366f1);
   font-size: 12px;
+}
+
+.chip--warn {
+  background: rgba(234, 179, 8, 0.15);
+  color: #a16207;
 }
 
 .copy-btn-wrap {

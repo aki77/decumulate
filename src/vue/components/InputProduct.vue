@@ -51,6 +51,14 @@ function onPresetChange(e: Event) {
       </label>
       <InputNumber id="volatility" v-model="state.volatility" min="5" max="30" step="1" />
     </div>
+    <div class="field field--full">
+      <label>
+        <input type="checkbox" v-model="state.enableJumpDiffusion" />
+        リーマン級暴落をシミュレーションに含める
+        <span class="badge-experimental">実験的</span>
+        <HelpIcon text="リスク資産（NISA／特定リスク／iDeCo）の月次運用に、年率 λ=0.02（50年に1回相当）の頻度で平均 -33%（σ_J=10%）の急落（Mertonジャンプ）を追加。GBMが過小評価する史実級の急落イベントを確率的に発生させ、p10／最大ドローダウンが現実寄りに厳しくなる。期待リターンも約 -0.66%/年 だけ下がる点に注意。防衛資産には適用されない。固定パラメータは変更不可。" />
+      </label>
+    </div>
     <div class="field">
       <label for="inflationRate">
         インフレ率（%/年）
@@ -60,3 +68,16 @@ function onPresetChange(e: Event) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.badge-experimental {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft, rgba(99, 102, 241, 0.12));
+  color: var(--accent, #6366f1);
+  vertical-align: middle;
+  margin-left: 4px;
+}
+</style>

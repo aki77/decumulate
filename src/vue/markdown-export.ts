@@ -102,7 +102,7 @@ function sectionInputBasic(state: ParamsState): string {
     `- インフレ率: ${formatNumber(state.inflationRate)}% / 実質取崩: ${state.inflationAdjustedWithdrawal ? "ON" : "OFF"}`,
     "",
     "### 利回り・ボラティリティ",
-    `- リスク資産: 年率 ${formatNumber(state.annualReturnRate)}%（名目） / σ ${formatNumber(state.volatility)}% / 経費率 ${formatNumber(state.expenseRatio, 3)}%（プリセット: ${presetLabel(state.productPreset)}）`,
+    `- リスク資産: 年率 ${formatNumber(state.annualReturnRate)}%（名目） / σ ${formatNumber(state.volatility)}% / 経費率 ${formatNumber(state.expenseRatio, 3)}%（プリセット: ${presetLabel(state.productPreset)}）${state.enableJumpDiffusion ? "／JDジャンプ有効" : ""}`,
     `- 防衛資産: 年率 ${formatNumber(state.defenseAnnualReturnRate)}%（名目） / σ ${formatNumber(state.defenseVolatility)}%（プリセット: ${defensePresetLabel(state.defenseProductPreset)}）`,
   ].join("\n");
 }

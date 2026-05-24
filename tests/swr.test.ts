@@ -51,6 +51,7 @@ const BASE_PARAMS: MonteCarloParams = {
     idecoLumpSumRatio: 1,
     idecoPensionYears: 10,
   },
+  enableJumpDiffusion: false,
 };
 
 test("findSafeWithdrawalRate - 典型 params で found を返し、採用 rate での再 MC が 95% 成功", () => {

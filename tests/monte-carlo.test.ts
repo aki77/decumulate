@@ -66,6 +66,7 @@ const BASE_PARAMS: MonteCarloParams = {
   guardrailUpperPercent: 20,
   guardrailLowerPercent: 20,
   guardrailAdjustmentPercent: 10,
+  enableJumpDiffusion: false,
 };
 
 // initialAmount + defenseRatio(%) を新シグネチャに変換するヘルパ。
@@ -1008,3 +1009,71 @@ test("finalAchievementProbability - 高すぎる finalTarget では達成確率�
   );
   assert.strictEqual(highTarget.finalAchievementProbability, 0);
 });
+
+// --- Jump Diffusion ---
+
+// p10 が 0 に張り付かない規模感: 5000万円・月10万取り崩し・30年
+const JD_BASE: MonteCarloParams = {
+  ...BASE_PARAMS,
+  initialNisa: 50_000_000,
+  fixedMonthlyWithdrawal: 100_000,
+  withdrawalYears: 30,
+};
+
+test("JD ON で SEED=42 再現性: 2回回して finalP10/P50/P90 完全一致", () => {
+  const params: MonteCarloParams = { ...BASE_PARAMS, enableJumpDiffusion: true, withdrawalYears: 20 };
+  const r1 = simulateMonteCarlo(params, SEED);
+  const r2 = simulateMonteCarlo(params, SEED);
+  const last1 = r1.yearly[r1.yearly.length - 1]!;
+  const last2 = r2.yearly[r2.yearly.length - 1]!;
+  assert.strictEqual(last1.p10, last2.p10);
+  assert.strictEqual(last1.p50, last2.p50);
+  assert.strictEqual(last1.p90, last2.p90);
+});
+
+test("JD OFF で従来結果と完全一致（既存パス不変）", () => {
+  const paramsOff: MonteCarloParams = { ...BASE_PARAMS, enableJumpDiffusion: false, withdrawalYears: 20 };
+  const r1 = simulateMonteCarlo(paramsOff, SEED);
+  const r2 = simulateMonteCarlo(paramsOff, SEED);
+  const last1 = r1.yearly[r1.yearly.length - 1]!;
+  const last2 = r2.yearly[r2.yearly.length - 1]!;
+  assert.strictEqual(last1.p10, last2.p10);
+  assert.strictEqual(last1.p50, last2.p50);
+});
+
+test("JD ON は OFF より finalP10 が低い（リスク評価が厳しくなる）", () => {
+  const off = simulateMonteCarlo({ ...JD_BASE, enableJumpDiffusion: false }, SEED);
+  const on  = simulateMonteCarlo({ ...JD_BASE, enableJumpDiffusion: true  }, SEED);
+  const lastOff = off.yearly[off.yearly.length - 1]!;
+  const lastOn  = on.yearly[on.yearly.length - 1]!;
+  assert.ok(lastOn.p10 < lastOff.p10, `JD ON p10=${lastOn.p10} should be < OFF p10=${lastOff.p10}`);
+});
+
+test("JD ON は maxDrawdownP10 が OFF より大きい（史実級ドローダウンが出る）", () => {
+  const off = simulateMonteCarlo({ ...JD_BASE, enableJumpDiffusion: false }, SEED);
+  const on  = simulateMonteCarlo({ ...JD_BASE, enableJumpDiffusion: true  }, SEED);
+  assert.ok(
+    on.maxDrawdownP10 > off.maxDrawdownP10,
+    `JD ON maxDrawdownP10=${on.maxDrawdownP10} should be > OFF ${off.maxDrawdownP10}`,
+  );
+});
+
+test("防衛資産のみのポートフォリオで JD ON/OFF 同一（JD が防衛資産に漏れない）", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    initialNisa: 0,
+    initialTaxableRisk: 0,
+    initialDefense: 10_000_000,
+    targetDefenseRatioStart: 100,
+    targetDefenseRatioEnd: 100,
+    withdrawalYears: 10,
+  };
+  const off = simulateMonteCarlo({ ...params, enableJumpDiffusion: false }, SEED);
+  const on  = simulateMonteCarlo({ ...params, enableJumpDiffusion: true  }, SEED);
+  const lastOff = off.yearly[off.yearly.length - 1]!;
+  const lastOn  = on.yearly[on.yearly.length - 1]!;
+  assert.strictEqual(lastOn.p10, lastOff.p10);
+  assert.strictEqual(lastOn.p50, lastOff.p50);
+  assert.strictEqual(lastOn.p90, lastOff.p90);
+});
+
