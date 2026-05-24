@@ -142,6 +142,8 @@ export interface MonthlyProjection {
   nisaTransferInfo: NisaTransferInfo | null;
   idecoLumpSumInfo: IdecoPayoutEvent | null;
   idecoPensionInfo: IdecoPayoutEvent | null;
+  /** Mertonジャンプ拡散有効時に、この月にジャンプが発生したことを示す。決定論版・JD無効時・非pivotパスでは undefined。 */
+  jumpOccurred?: boolean;
 }
 
 export interface CompoundResult {

@@ -1077,3 +1077,48 @@ test("防衛資産のみのポートフォリオで JD ON/OFF 同一（JD が防
   assert.strictEqual(lastOn.p90, lastOff.p90);
 });
 
+test("jumpOccurred: JD ON のとき p50 のジャンプ月数が妥当な範囲 (0〜10)", () => {
+  const params: MonteCarloParams = { ...JD_BASE, enableJumpDiffusion: true };
+  const r = simulateMonteCarlo(params, SEED);
+  const jumpCount = r.pivotMonthlies.p50.filter((m) => m.jumpOccurred).length;
+  assert.ok(jumpCount >= 0 && jumpCount <= 10, `jumpCount=${jumpCount} should be 0-10`);
+});
+
+test("jumpOccurred: JD OFF のとき pivotMonthlies と sequenceP10Monthly にジャンプなし", () => {
+  const params: MonteCarloParams = { ...JD_BASE, enableJumpDiffusion: false };
+  const r = simulateMonteCarlo(params, SEED);
+  const allMonthly = [
+    ...r.pivotMonthlies.p10,
+    ...r.pivotMonthlies.p25,
+    ...r.pivotMonthlies.p50,
+    ...r.pivotMonthlies.p75,
+    ...r.pivotMonthlies.p90,
+    ...r.sequenceP10Monthly,
+  ];
+  assert.ok(
+    allMonthly.every((m) => !m.jumpOccurred),
+    "JD OFF でジャンプが記録されてはいけない",
+  );
+});
+
+test("jumpOccurred: 同一シードで jumpOccurred 配列が再現される", () => {
+  const params: MonteCarloParams = { ...JD_BASE, enableJumpDiffusion: true };
+  const r1 = simulateMonteCarlo(params, SEED);
+  const r2 = simulateMonteCarlo(params, SEED);
+  const jumps1 = r1.pivotMonthlies.p50.map((m) => !!m.jumpOccurred);
+  const jumps2 = r2.pivotMonthlies.p50.map((m) => !!m.jumpOccurred);
+  assert.deepStrictEqual(jumps1, jumps2);
+});
+
+test("jumpOccurred: ジャンプ月は monthlyRateRisk が顕著にマイナス (< -5%)", () => {
+  const params: MonteCarloParams = { ...JD_BASE, enableJumpDiffusion: true };
+  const r = simulateMonteCarlo(params, SEED);
+  const jumpMonths = [
+    ...r.pivotMonthlies.p50,
+    ...r.sequenceP10Monthly,
+  ].filter((m) => m.jumpOccurred);
+  for (const m of jumpMonths) {
+    assert.ok(m.monthlyRateRisk < -0.05, `jumpOccurred月のmonthlyRateRisk=${m.monthlyRateRisk} < -5% を期待`);
+  }
+});
+

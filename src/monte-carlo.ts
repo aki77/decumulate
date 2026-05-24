@@ -385,6 +385,7 @@ export function simulateMonteCarlo(
     nisaTransferInfo: NisaTransferInfo | null;
     idecoLumpSumInfo: IdecoPayoutEvent | null;
     idecoPensionInfo: IdecoPayoutEvent | null;
+    jumpOccurred: boolean;
   };
 
   const buildRow = (raw: RawRowInput): MonthlyProjection => {
@@ -433,6 +434,7 @@ export function simulateMonteCarlo(
       nisaTransferInfo: raw.nisaTransferInfo,
       idecoLumpSumInfo: raw.idecoLumpSumInfo,
       idecoPensionInfo: raw.idecoPensionInfo,
+      ...(raw.jumpOccurred ? { jumpOccurred: true } : {}),
     };
   };
 
@@ -570,6 +572,7 @@ export function simulateMonteCarlo(
 
         const zRisk = normalRandom(rng);
         let riskGrow = Math.exp(monthlyDriftRisk + monthlySigmaRisk * zRisk);
+        let jumpOccurredThisMonth = false;
         if (enableJumpDiffusion) {
           let p = rng();
           let logJumpSum = 0;
@@ -577,7 +580,10 @@ export function simulateMonteCarlo(
             logJumpSum += JD_MU_LOG + JD_SIGMA_LOG * normalRandom(rng);
             p *= rng();
           }
-          if (logJumpSum !== 0) riskGrow *= Math.exp(logJumpSum);
+          if (logJumpSum !== 0) {
+            riskGrow *= Math.exp(logJumpSum);
+            jumpOccurredThisMonth = true;
+          }
         }
         nisaPaths[i]! *= riskGrow;
         taxablePaths[i]! *= riskGrow;
@@ -967,6 +973,7 @@ export function simulateMonteCarlo(
             nisaTransferInfo: m === 0 ? nisaTransferByIndex.get(i) ?? null : null,
             idecoLumpSumInfo: idecoLumpSumRecorded,
             idecoPensionInfo: idecoPensionRecorded,
+            jumpOccurred: jumpOccurredThisMonth,
           };
           if (recordPivot) {
             pushPivotRow(keysForMask(pivotMask), rawRow);

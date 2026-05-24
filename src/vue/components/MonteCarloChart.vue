@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onBeforeUnmount } from "vue";
 import { Chart } from "chart.js";
 import { ensureChartRegistered } from "../composables/useChartJs.ts";
 import { buildPhaseAnnotations } from "../composables/phaseAnnotations.ts";
+import { extractJumpYears, buildJumpPointConfig } from "../composables/jumpAnnotations.ts";
 import { toMan, formatManValue } from "../format.ts";
 import { NUM_SIMULATIONS } from "../../monte-carlo.ts";
 import type { MonteCarloResult, MonteCarloParams } from "../../monte-carlo.ts";
@@ -37,6 +38,7 @@ async function copyDebugJson(): Promise<void> {
     },
     yearly: mc.yearly,
     sequenceP10Diagnostics: mc.sequenceP10Diagnostics,
+    jumpYears: { p50: jumpYearsP50, sequenceP10: jumpYearsSeq },
   };
   try {
     await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
@@ -49,6 +51,8 @@ async function copyDebugJson(): Promise<void> {
 
 const canvas = ref<HTMLCanvasElement | null>(null);
 let chart: Chart | null = null;
+let jumpYearsP50: number[] = [];
+let jumpYearsSeq: number[] = [];
 
 function buildChart(): void {
   if (!canvas.value) return;
@@ -86,6 +90,11 @@ function buildChart(): void {
     }
   }
 
+  jumpYearsP50 = params.enableJumpDiffusion ? extractJumpYears(mc.pivotMonthlies.p50) : [];
+  jumpYearsSeq = params.enableJumpDiffusion ? extractJumpYears(mc.sequenceP10Monthly) : [];
+  const p50JumpCfg = buildJumpPointConfig(jumpYearsP50, mc.yearly.length);
+  const seqJumpCfg = buildJumpPointConfig(jumpYearsSeq, mc.yearly.length);
+
   const annotations = buildPhaseAnnotations({
     contributionYears: params.contributionYears,
     withdrawalStartYear: params.withdrawalStartYear,
@@ -110,8 +119,8 @@ function buildChart(): void {
           backgroundColor: "transparent",
           borderWidth: 2.5,
           fill: false,
-          pointRadius: 0,
           tension: 0.15,
+          ...p50JumpCfg,
         },
         ...(sequenceYearly ? [{
           label: "シーケンスリスクシナリオ (p10)",
@@ -121,8 +130,8 @@ function buildChart(): void {
           backgroundColor: "transparent",
           borderWidth: 2,
           fill: false,
-          pointRadius: 0,
           tension: 0,
+          ...seqJumpCfg,
           segment: {
             borderColor: (ctx: { p1DataIndex: number }) =>
               ctx.p1DataIndex <= seqWindowEndYear
@@ -150,7 +159,17 @@ function buildChart(): void {
       plugins: {
         legend: { position: "bottom" },
         tooltip: {
-          callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatManValue(ctx.parsed.y as number)}` },
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${formatManValue(ctx.parsed.y as number)}`,
+            afterBody: (items) => {
+              const idx = items[0]?.dataIndex;
+              if (idx == null) return [];
+              const lines: string[] = [];
+              if (jumpYearsP50.includes(idx)) lines.push("▽ p50: ジャンプ発生年（暴落）");
+              if (jumpYearsSeq.includes(idx)) lines.push("▽ シーケンスリスク: ジャンプ発生年（暴落）");
+              return lines;
+            },
+          },
         },
         annotation: { annotations } as never,
       },
@@ -171,7 +190,7 @@ onBeforeUnmount(() => chart?.destroy());
       <canvas ref="canvas"></canvas>
     </div>
     <p class="chart-note">
-      塗りつぶしは p10–p90 のレンジ。中央線は p50（中央値）。赤線は取り崩し開始 5 年の累積実質リターンが下位 10% の単一パスで、<strong>実線部分（最初の 5 年）がシーケンスリスクが顕在化する局面</strong>。点線部分は同一パスの参考延長（長期では回復するケースも多い）。インフレ控除後の実質値で表示。赤線（シーケンスリスク p10）と最終残高 p10 は別のパス。GBM（正規分布）モデルのため、リーマン級の暴落などファットテール事象は過小評価される傾向がある。
+      塗りつぶしは p10–p90 のレンジ。中央線は p50（中央値）。赤線は取り崩し開始 5 年の累積実質リターンが下位 10% の単一パスで、<strong>実線部分（最初の 5 年）がシーケンスリスクが顕在化する局面</strong>。点線部分は同一パスの参考延長（長期では回復するケースも多い）。インフレ控除後の実質値で表示。赤線（シーケンスリスク p10）と最終残高 p10 は別のパス。GBM（正規分布）モデルのため、リーマン級の暴落などファットテール事象は過小評価される傾向がある。<template v-if="params.enableJumpDiffusion">▽マーカー（ダークレッド）はMertonジャンプ拡散が発生した年（リーマン級暴落相当）。</template>
     </p>
     <button type="button" class="debug-copy-btn" @click="copyDebugJson">{{ copyLabel }}</button>
   </div>
