@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import HelpIcon from "./HelpIcon.vue";
-import { useMetrics, type DieWithZeroStatus } from "../composables/useMetrics.ts";
+import { useMetrics, PLAN_RATING_LABELS } from "../composables/useMetrics.ts";
 import { formatMan, formatPercent } from "../format.ts";
 import { METRICS_DETAIL_HELP as HELP } from "../help-dict.ts";
 import type { YearlyProjection, CalculateParams } from "../../calculate.ts";
@@ -19,15 +19,10 @@ const metrics = useMetrics(
   () => props.params,
   () => props.finalTargetYen ?? 0,
   () => props.mc.finalP50,
+  () => props.mc.finalAchievementProbability,
 );
 
 const isDieWithZero = computed(() => props.params.withdrawalMode === "zero-landing");
-
-const statusLabel: Record<DieWithZeroStatus, string> = {
-  surplus: "使い残し",
-  shortage: "不足リスク",
-  "near-zero": "ほぼ目標通り",
-};
 </script>
 
 <template>
@@ -97,23 +92,35 @@ const statusLabel: Record<DieWithZeroStatus, string> = {
           <div
             class="metric-value"
             :class="{
-              'delta-surplus': metrics.finalStatus === 'surplus',
-              'delta-shortage': metrics.finalStatus === 'shortage',
+              'delta-surplus': metrics.finalDelta > 0,
+              'delta-shortage': metrics.finalDelta < 0,
             }"
           >{{ (metrics.finalDelta >= 0 ? "+" : "") + formatMan(metrics.finalDelta) }}</div>
         </div>
         <div class="metric">
-          <div class="metric-label">ゼロ着地判定<HelpIcon :text="HELP.finalStatus" /></div>
+          <div class="metric-label">
+            目標達成確率<HelpIcon :text="HELP.finalAchievementProbability" />
+          </div>
+          <div class="metric-value">{{
+            metrics.finalAchievementProbability != null
+              ? formatPercent(metrics.finalAchievementProbability)
+              : "—"
+          }}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">プラン評価<HelpIcon :text="HELP.planRating" /></div>
           <div class="metric-value">
-            <span class="status-badge" :class="`status-${metrics.finalStatus}`">
-              {{ statusLabel[metrics.finalStatus] }}
+            <span class="status-badge" :class="`rating-${metrics.planRating}`">
+              {{ PLAN_RATING_LABELS[metrics.planRating] }}
             </span>
           </div>
         </div>
       </div>
-      <p v-if="metrics.finalStatus === 'shortage'" class="shortage-hint">
-        ※ 最低月額（No-Go 期の床）と最終残高目標を同時に達成できない可能性があります。
-        床を下げる / 最終残高目標を下げる / 想定寿命を縮める のいずれかを試してください。
+      <p v-if="metrics.planRating === 'risky'" class="rating-hint rating-hint-risky">
+        ※ 半数以上のシナリオで目標残高に届きません。月額（または No-Go 期の床）を下げる / 最終残高目標を下げる / 想定寿命を縮める のいずれかを試してください。
+      </p>
+      <p v-else-if="metrics.planRating === 'conservative'" class="rating-hint rating-hint-conservative">
+        ※ FP 実務目安より保守的です（達成確率 95% 以上）。DIE WITH ZERO の観点では月額を上げる / 最終残高目標を上げる余地があります。
       </p>
     </template>
   </section>
@@ -155,29 +162,48 @@ const statusLabel: Record<DieWithZeroStatus, string> = {
   line-height: 1.6;
 }
 
-.status-near-zero {
+.rating-realistic {
   background: rgba(16, 185, 129, 0.12);
   color: #059669;
 }
 
-.status-surplus {
+.rating-conservative {
+  background: rgba(202, 138, 4, 0.14);
+  color: #b45309;
+}
+
+.rating-marginal {
   background: rgba(217, 119, 6, 0.12);
   color: #d97706;
 }
 
-.status-shortage {
+.rating-risky {
   background: rgba(220, 38, 38, 0.12);
   color: #dc2626;
 }
 
-.shortage-hint {
+.rating-unknown {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
+.rating-hint {
   margin: 8px 0 0;
   padding: 8px 12px;
   font-size: 12px;
   line-height: 1.5;
+  border-radius: 4px;
+}
+
+.rating-hint-risky {
   color: #b91c1c;
   background: rgba(220, 38, 38, 0.06);
   border-left: 3px solid var(--danger, #dc2626);
-  border-radius: 4px;
+}
+
+.rating-hint-conservative {
+  color: #92400e;
+  background: rgba(202, 138, 4, 0.08);
+  border-left: 3px solid #ca8a04;
 }
 </style>

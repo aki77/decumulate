@@ -33,6 +33,9 @@ export interface MonteCarloParams extends CalculateParams {
   drawdownThresholdPercent: number;
   skipRebalanceOnDrawdown: boolean;
   zeroLandingCurve?: ZeroLandingCurve;
+  // 「想定寿命時の残高がこの値以上で終わったパス」を達成と数える。円・実質値。
+  // 未指定なら finalAchievementProbability は undefined を返す（zero-landing 以外のモードでは渡さない想定）。
+  finalTarget?: number;
 }
 
 export interface MonteCarloYearly {
@@ -66,6 +69,8 @@ export interface MonteCarloResult {
   yearly: MonteCarloYearly[];
   failureProbability: number;
   depletionProbability: number;
+  // finalTarget が渡されたときのみ算出。N=5000 パスのうち finalTotal >= finalTarget となった割合。
+  finalAchievementProbability?: number;
   finalP50: number;
   finalP10: number;
   finalP90: number;
@@ -263,11 +268,15 @@ export function simulateMonteCarlo(
 
   // 本体ループを内部関数化している理由: pivotMask=null（フェーズ1）と pivotMask=非null（フェーズ2）の
   // 間で RNG 消費順序を完全に揃えることで、両フェーズが同じパスを生成し再現性を保つ。
+  const finalTargetThreshold = params.finalTarget;
+  const trackAchievement = finalTargetThreshold != null;
+
   const runSimulation = (
     pivotSpec: PivotSpec | null,
   ): {
     yearly: MonteCarloYearly[];
     failureProbability: number;
+    finalAchievementProbability: number | undefined;
     finalTotals: Float64Array | null;
     sequenceReturns: Float64Array | null;
     pivotMonthlies: PivotMonthlies;
@@ -983,6 +992,7 @@ export function simulateMonteCarlo(
   const totalContributed =
     initialTotal + monthlyContribution * 12 * Math.min(contributionYears, totalYears);
   let failureCount = 0;
+  let achievementCount = 0;
   const finalTotals = pivotSpec === null ? new Float64Array(N) : null;
   for (let i = 0; i < N; i++) {
     let finalTotal = nisaPaths[i]! + taxablePaths[i]!;
@@ -990,6 +1000,7 @@ export function simulateMonteCarlo(
     if (useIdeco) finalTotal += idecoPaths![i]!;
     if (finalTotals !== null) finalTotals[i] = finalTotal;
     if (finalTotal + cumulativeWithdrawals[i]! < totalContributed) failureCount++;
+    if (trackAchievement && finalTotal >= finalTargetThreshold!) achievementCount++;
   }
 
   let maxDrawdown: { p10: number; p50: number; p90: number } | null = null;
@@ -1002,6 +1013,7 @@ export function simulateMonteCarlo(
   return {
     yearly,
     failureProbability: failureCount / N,
+    finalAchievementProbability: trackAchievement ? achievementCount / N : undefined,
     finalTotals,
     sequenceReturns,
     pivotMonthlies,
@@ -1097,6 +1109,7 @@ export function simulateMonteCarlo(
     yearly: phase1.yearly,
     failureProbability: phase1.failureProbability,
     depletionProbability: lastYearly.depletionRate,
+    finalAchievementProbability: phase1.finalAchievementProbability,
     finalP50,
     finalP10: lastYearly.p10,
     finalP90: lastYearly.p90,

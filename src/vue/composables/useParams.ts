@@ -265,6 +265,7 @@ export function useParams() {
       guardrailLowerPercent: state.guardrailLowerPercent,
       guardrailAdjustmentPercent: state.guardrailAdjustmentPercent,
       zeroLandingCurve: state.withdrawalMode === "zero-landing" ? extractZeroLandingCurve(state) : undefined,
+      finalTarget: state.withdrawalMode === "zero-landing" ? state.finalTargetMan * MAN : undefined,
       idecoEnabled: state.idecoEnabled,
       ideco: {
         initialIdeco: state.initialIdecoMan * MAN,
@@ -369,8 +370,9 @@ export function useParams() {
         curve: extractZeroLandingCurve(state),
       });
       if (result.boundary === "found") {
-        // 探索精度 1000 円を維持するため 0.1 万円単位で丸める。
-        const goGoMonthly = Math.round(result.monthlyAmount / 1000) * 1000;
+        // 月額は整数の万円フィールドに入る前提のため万円単位で切り捨てる（ユーザ要件: 小数点以下切り捨て）。
+        // 切り捨てると目標達成確率が 50% を下回る方向（より保守的）に倒れる。
+        const goGoMonthly = Math.floor(result.monthlyAmount / MAN) * MAN;
         state.fixedMonthlyWithdrawalMan = goGoMonthly / MAN;
         state.withdrawalLimitSteps = buildZeroLandingSchedule(goGoMonthly, extractZeroLandingCurve(state)).map(
           (s) => ({

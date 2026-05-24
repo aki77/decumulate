@@ -5,7 +5,7 @@ import type { CalculateParams } from "../calculate.ts";
 import type { MonteCarloYearly, MonteCarloResult } from "../monte-carlo.ts";
 import type { ParamsState, WithdrawalMode } from "./composables/useParams.ts";
 import type { SimulatorResult } from "./composables/useSimulator.ts";
-import type { Metrics } from "./composables/useMetrics.ts";
+import { PLAN_RATING_LABELS, type Metrics } from "./composables/useMetrics.ts";
 import { PRESETS, DEFENSE_PRESETS } from "./composables/useParams.ts";
 import { withdrawalLabel } from "./withdrawal-label.ts";
 import { MAN, formatMan, formatPercent, formatNumber } from "./format.ts";
@@ -227,6 +227,26 @@ function sectionMonteCarloMetrics(mc: MonteCarloResult): string {
   return lines.join("\n");
 }
 
+// DIE WITH ZERO モードのみ出力。プラン評価（FP 実務基準）の根拠を AI に渡す。
+function sectionPlanRating(metrics: Metrics, state: ParamsState): string | null {
+  if (state.withdrawalMode !== "zero-landing") return null;
+  const lines: string[] = ["### DIE WITH ZERO プラン評価"];
+  lines.push(
+    `- 想定寿命（${metrics.lifeExpectancyAge} 歳）時残高 p50（実質）: ${formatMan(metrics.finalTotalAtLifeExpectancy)}`,
+  );
+  lines.push(
+    `- 目標残高との差分: ${(metrics.finalDelta >= 0 ? "+" : "") + formatMan(metrics.finalDelta)}`,
+  );
+  if (metrics.finalAchievementProbability != null) {
+    lines.push(`- 目標達成確率: ${formatPercent(metrics.finalAchievementProbability)}`);
+  }
+  lines.push(`- プラン評価: ${PLAN_RATING_LABELS[metrics.planRating]}`);
+  lines.push(
+    "- 評価基準: 目標達成確率（MC 5000 試行のうち最終残高が目標以上で終わった割合）で 95%↑「保守的」/ 80〜95%「現実的（Kitces 等の FP 実務目安）」/ 50〜80%「ギリギリ」/ 50%↓「リスク高」",
+  );
+  return lines.join("\n");
+}
+
 function sectionNisaIdecoMetrics(metrics: Metrics, state: ParamsState): string {
   const lines: string[] = [
     "### NISA / iDeCo",
@@ -332,10 +352,11 @@ export function buildMarkdownReport(
     "## 主要メトリクス",
     sectionDeterministicMetrics(metrics),
     sectionMonteCarloMetrics(result.mc),
+    sectionPlanRating(metrics, state),
     sectionNisaIdecoMetrics(metrics, state),
     sectionYearlyTable(result.mc.yearly, state, params),
     sectionGlossary(state),
     sectionFootnotes(),
   ];
-  return parts.join("\n\n") + "\n";
+  return parts.filter((s): s is string => s != null).join("\n\n") + "\n";
 }

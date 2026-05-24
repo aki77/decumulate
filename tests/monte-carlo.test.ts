@@ -965,3 +965,46 @@ test("zero-landing 動的取り崩し: zeroLandingCurve なし（旧挙動）で
     );
   }
 });
+
+// --- finalAchievementProbability ---
+
+test("finalAchievementProbability - finalTarget 未指定なら undefined", () => {
+  const result = simulateMonteCarlo(BASE_PARAMS, SEED);
+  assert.strictEqual(result.finalAchievementProbability, undefined);
+});
+
+test("finalAchievementProbability - finalTarget 0 でも算出される（取り崩し無しで全パス達成）", () => {
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    initialNisa: 10_000_000,
+    withdrawalYears: 5,
+    withdrawalMode: "amount",
+    fixedMonthlyWithdrawal: 0,
+    finalTarget: 0,
+  };
+  const result = simulateMonteCarlo(params, SEED);
+  assert.strictEqual(typeof result.finalAchievementProbability, "number");
+  assert.ok(
+    result.finalAchievementProbability! >= 0 && result.finalAchievementProbability! <= 1,
+    "確率は [0,1]",
+  );
+  // 取り崩し無しなら全パス達成
+  assert.strictEqual(result.finalAchievementProbability, 1);
+});
+
+test("finalAchievementProbability - 高すぎる finalTarget では達成確率が下がる", () => {
+  const baseParams: MonteCarloParams = {
+    ...BASE_PARAMS,
+    initialNisa: 10_000_000,
+    withdrawalYears: 10,
+    withdrawalMode: "amount",
+    fixedMonthlyWithdrawal: 100_000,
+  };
+  const lowTarget = simulateMonteCarlo({ ...baseParams, finalTarget: 0 }, SEED);
+  const highTarget = simulateMonteCarlo({ ...baseParams, finalTarget: 1_000_000_000 }, SEED);
+  assert.ok(
+    lowTarget.finalAchievementProbability! > highTarget.finalAchievementProbability!,
+    `低目標 ${lowTarget.finalAchievementProbability} > 高目標 ${highTarget.finalAchievementProbability}`,
+  );
+  assert.strictEqual(highTarget.finalAchievementProbability, 0);
+});
