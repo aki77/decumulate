@@ -1,14 +1,15 @@
 <script lang="ts" setup>
 import { SCENARIO_PRESETS } from "../composables/useParams.ts";
 
+const { initiallyOpen = true } = defineProps<{ initiallyOpen?: boolean }>();
 const emit = defineEmits<{
   applyScenarioPreset: [index: number];
 }>();
 </script>
 
 <template>
-  <div class="field-group scenario-preset-group">
-    <h3>よくある設定から始める</h3>
+  <details class="field-group scenario-preset-group" :open="initiallyOpen || undefined">
+    <summary class="scenario-summary"><h3>よくある設定から始める <span class="scenario-chevron">▶</span></h3></summary>
     <p class="scenario-hint">典型的なシナリオを選ぶとすべてのフィールドが自動入力されます。</p>
     <div class="scenario-buttons">
       <button
@@ -22,7 +23,7 @@ const emit = defineEmits<{
         <span class="scenario-desc">{{ scenario.description }}</span>
       </button>
     </div>
-  </div>
+  </details>
 </template>
 
 <style scoped>
@@ -31,6 +32,31 @@ const emit = defineEmits<{
   border-bottom: 2px solid var(--accent, #6366f1);
   margin-bottom: 8px;
   padding-bottom: 20px;
+}
+
+.scenario-summary {
+  cursor: pointer;
+  list-style: none;
+  padding-bottom: 4px;
+}
+
+.scenario-summary::-webkit-details-marker {
+  display: none;
+}
+
+.scenario-summary h3 {
+  margin: 0;
+}
+
+.scenario-chevron {
+  font-size: 10px;
+  color: var(--muted);
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+.scenario-preset-group[open] .scenario-chevron {
+  transform: rotate(90deg);
 }
 
 .scenario-hint {

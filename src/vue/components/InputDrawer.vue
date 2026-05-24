@@ -16,6 +16,7 @@ const props = defineProps<{
   open: boolean;
   isComputingSwr: boolean;
   isComputingZeroLanding: boolean;
+  initiallyOpenScenarioPreset: boolean;
 }>();
 const emit = defineEmits<{
   close: [];
@@ -79,7 +80,7 @@ watch(
             <button type="button" class="drawer-close" aria-label="閉じる" @click="emit('close')">&#x2715;</button>
           </header>
           <div class="drawer-body">
-            <InputScenarioPreset @apply-scenario-preset="emit('applyScenarioPreset', $event)" />
+            <InputScenarioPreset :initially-open="props.initiallyOpenScenarioPreset" @apply-scenario-preset="emit('applyScenarioPreset', $event)" />
             <InputBasic v-model="state" />
             <InputPortfolio v-model="state" />
             <InputProduct v-model="state" @apply-product-preset="emit('applyProductPreset', $event)" />

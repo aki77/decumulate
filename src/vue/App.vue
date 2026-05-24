@@ -32,6 +32,7 @@ const storage = useStorage(state);
 const { result } = useSimulator(debouncedMcParams);
 
 const drawerOpen = useLocalStorage("decumulate:drawerOpen:v1", true);
+let initiallyOpenScenarioPreset = true;
 const openBtnEl = useTemplateRef<HTMLButtonElement>("openBtnEl");
 
 function openDrawer() {
@@ -54,6 +55,7 @@ function estimateTargetDefenseRatioPercent(): number {
 
 onMounted(() => {
   const loaded = storage.load();
+  initiallyOpenScenarioPreset = !loaded;
   if (!loaded) {
     const est = estimateTargetDefenseRatioPercent();
     state.targetDefenseRatioStartPercent = est;
@@ -128,6 +130,7 @@ function handleExport() {
 
     <InputDrawer
       :open="drawerOpen"
+      :initially-open-scenario-preset="initiallyOpenScenarioPreset"
       :is-computing-swr="isComputingSwr"
       :is-computing-zero-landing="isComputingZeroLanding"
       v-model="state"
