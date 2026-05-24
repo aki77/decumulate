@@ -19,6 +19,7 @@ const isRateMode = computed(
 );
 const isGuardrailMode = computed(() => state.value.withdrawalMode === "rate-guardrail");
 const isDieWithZero = computed(() => state.value.withdrawalMode === "zero-landing");
+const showLimitTable = computed(() => isRateMode.value || isDieWithZero.value);
 const lifeExpectancyAge = computed(
   () => state.value.currentAge + state.value.withdrawalStartYear + state.value.withdrawalYears,
 );
@@ -59,7 +60,7 @@ defineEmits<{
       <div class="field">
         <label for="fixedMonthlyWithdrawal">
           Go-Go 期月額（万円）
-          <HelpIcon text="アクティブに使う Go-Go 期（〜Slow-Go 開始年齢 -1 歳）の月額。「ゼロ着地」ボタンで、床と最終残高目標を制約として、想定寿命時に目標残高に着地する Go-Go 月額を二分探索で逆算します。Slow-Go 月額 = Go-Go × 係数、No-Go 月額 = 床（下のフィールド）。" />
+          <HelpIcon text="取り崩し開始時点の基準月額。リスクサイド資産の変動に連動して毎年自動調整され、下限・上限の範囲内で動的に変化します。「ゼロ着地」ボタンで、最終残高目標に着地する基準月額を逆算できます。Slow-Go 月額 = 基準 × 係数、No-Go 月額 = 最低月額（固定）。" />
         </label>
         <div class="rate-with-button">
           <InputNumber id="fixedMonthlyWithdrawal" v-model="state.fixedMonthlyWithdrawalMan" min="0" step="1" />
@@ -72,6 +73,7 @@ defineEmits<{
             {{ isComputingZeroLanding ? "計算中…" : "ゼロ着地" }}
           </button>
         </div>
+        <p class="zero-landing-reset-note">再実行すると下記の上限・下限は再計算結果でリセットされます</p>
       </div>
       <div class="field">
         <label for="minMonthlyWithdrawal">
@@ -115,7 +117,7 @@ defineEmits<{
       </details>
     </template>
     <template v-if="isRateMode">
-      <div v-if="isRateMode" class="field">
+      <div class="field">
         <label for="withdrawalRate">
           年間引出率（%）
           <HelpIcon text="年あたりの引出割合。Trinity Study モードでは取り崩し開始時の総資産に対する率（4%が目安）。リスク資産モードでは毎年初時点のリスク資産に対する率。「自動算出」ボタンで、成功率95%（取り崩し終了時に資産が枯渇しない確率）を満たす最大の引出率を二分探索で求められます。" />
@@ -158,47 +160,48 @@ defineEmits<{
           </div>
         </div>
       </details>
-      <div class="field field--full">
-        <label>
-          月額下限・上限（年齢ステップ式）
-          <HelpIcon text="年齢に応じて月額下限・上限を段階的に変えられます。各行の「〜歳まで」までその区間の下限・上限を適用、最後の行は「以降ずっと」。値は「現在の購買力（万円）」で、シミュレーション内では自動でインフレ名目化されます。空欄は無制限。下限>上限のときは上限が優先されます。Guyton-Klinger モードでは GK 調整後の引出額をさらにこの下限・上限で挟むため、「最低限この金額は引き出す／この金額以上は引き出さない」という生活費の安全網として活用できます。" />
-        </label>
-        <table class="limit-table">
-          <thead>
-            <tr>
-              <th>〜歳まで</th>
-              <th>下限（万円）</th>
-              <th>上限（万円）</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(step, idx) in state.withdrawalLimitSteps" :key="idx">
-              <td>
-                <span v-if="idx === state.withdrawalLimitSteps.length - 1" class="terminal-label">以降</span>
-                <InputNumber v-else v-model="step.untilAge" min="0" max="120" step="1" placeholder="例: 69" />
-              </td>
-              <td>
-                <InputNumber v-model="step.floorMan" min="0" step="1" placeholder="無制限" />
-              </td>
-              <td>
-                <InputNumber v-model="step.ceilingMan" min="0" step="1" placeholder="無制限" />
-              </td>
-              <td>
-                <button
-                  v-if="idx !== state.withdrawalLimitSteps.length - 1"
-                  type="button"
-                  class="limit-remove"
-                  aria-label="削除"
-                  @click="$emit('removeLimitStep', idx)"
-                >×</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <button type="button" class="limit-add" @click="$emit('addLimitStep')">＋ 行を追加</button>
-      </div>
     </template>
+    <div v-if="showLimitTable" class="field field--full">
+      <label>
+        月額下限・上限（年齢ステップ式）
+        <HelpIcon text="年齢に応じて月額下限・上限を段階的に変えられます。各行の「〜歳まで」までその区間の下限・上限を適用、最後の行は「以降ずっと」。値は「現在の購買力（万円）」で、シミュレーション内では自動でインフレ名目化されます。空欄は無制限。下限>上限のときは上限が優先されます。Guyton-Klinger モードでは GK 調整後の引出額をさらにこの下限・上限で挟むため、「最低限この金額は引き出す／この金額以上は引き出さない」という生活費の安全網として活用できます。" />
+      </label>
+      <p v-if="isDieWithZero" class="zero-landing-table-note">ゼロ着地ソルバーで自動入力された値です。下限・上限を広げて下落耐性を持たせることができます。</p>
+      <table class="limit-table">
+        <thead>
+          <tr>
+            <th>〜歳まで</th>
+            <th>下限（万円）</th>
+            <th>上限（万円）</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(step, idx) in state.withdrawalLimitSteps" :key="idx">
+            <td>
+              <span v-if="idx === state.withdrawalLimitSteps.length - 1" class="terminal-label">以降</span>
+              <InputNumber v-else v-model="step.untilAge" min="0" max="120" step="1" placeholder="例: 69" />
+            </td>
+            <td>
+              <InputNumber v-model="step.floorMan" min="0" step="1" placeholder="無制限" />
+            </td>
+            <td>
+              <InputNumber v-model="step.ceilingMan" min="0" step="1" placeholder="無制限" />
+            </td>
+            <td>
+              <button
+                v-if="idx !== state.withdrawalLimitSteps.length - 1"
+                type="button"
+                class="limit-remove"
+                aria-label="削除"
+                @click="$emit('removeLimitStep', idx)"
+              >×</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <button type="button" class="limit-add" @click="$emit('addLimitStep')">＋ 行を追加</button>
+    </div>
     <div v-if="!isRateMode" class="field checkbox-field">
       <input
         id="inflationAdjustedWithdrawal"
@@ -367,5 +370,21 @@ defineEmits<{
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.zero-landing-reset-note {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.zero-landing-table-note {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  background: var(--surface-2, rgba(0, 0, 0, 0.03));
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--muted);
 }
 </style>

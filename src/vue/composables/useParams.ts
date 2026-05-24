@@ -247,10 +247,7 @@ export function useParams() {
       withdrawalMode: state.withdrawalMode,
       fixedMonthlyWithdrawal: state.fixedMonthlyWithdrawalMan * MAN,
       withdrawalRate: state.withdrawalRate,
-      withdrawalLimitSchedule:
-        state.withdrawalMode === "zero-landing"
-          ? buildZeroLandingSchedule(state.fixedMonthlyWithdrawalMan * MAN, extractZeroLandingCurve(state))
-          : normalizeLimitSteps(state.withdrawalLimitSteps),
+      withdrawalLimitSchedule: normalizeLimitSteps(state.withdrawalLimitSteps),
       inflationAdjustedWithdrawal: state.inflationAdjustedWithdrawal,
       basePension: state.basePensionMan * MAN,
       pensionStartAge: state.pensionStartAge,
@@ -267,6 +264,7 @@ export function useParams() {
       guardrailUpperPercent: state.guardrailUpperPercent,
       guardrailLowerPercent: state.guardrailLowerPercent,
       guardrailAdjustmentPercent: state.guardrailAdjustmentPercent,
+      zeroLandingCurve: state.withdrawalMode === "zero-landing" ? extractZeroLandingCurve(state) : undefined,
       idecoEnabled: state.idecoEnabled,
       ideco: {
         initialIdeco: state.initialIdecoMan * MAN,
@@ -372,7 +370,15 @@ export function useParams() {
       });
       if (result.boundary === "found") {
         // 探索精度 1000 円を維持するため 0.1 万円単位で丸める。
-        state.fixedMonthlyWithdrawalMan = Math.round(result.monthlyAmount / 1000) / 10;
+        const goGoMonthly = Math.round(result.monthlyAmount / 1000) * 1000;
+        state.fixedMonthlyWithdrawalMan = goGoMonthly / MAN;
+        state.withdrawalLimitSteps = buildZeroLandingSchedule(goGoMonthly, extractZeroLandingCurve(state)).map(
+          (s) => ({
+            untilAge: s.untilAge,
+            floorMan: s.floor != null ? s.floor / MAN : null,
+            ceilingMan: s.ceiling != null ? s.ceiling / MAN : null,
+          }),
+        );
       }
       return result;
     } finally {

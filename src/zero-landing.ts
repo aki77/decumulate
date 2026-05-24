@@ -1,13 +1,6 @@
 import { simulateMonteCarlo, type MonteCarloParams } from "./monte-carlo.ts";
-import type { WithdrawalLimitStep } from "./calculate.ts";
-
-// DIE WITH ZERO カーブの定義。Go-Go 月額を変数として与え、Slow-Go = Go-Go × slowGoCoef、No-Go = noGoMonthly（床、独立変数）。
-export interface ZeroLandingCurve {
-  slowGoStartAge: number;
-  noGoStartAge: number;
-  slowGoCoef: number;
-  noGoMonthly: number;
-}
+import type { WithdrawalLimitStep, ZeroLandingCurve } from "./calculate.ts";
+export type { ZeroLandingCurve } from "./calculate.ts";
 
 export interface ZeroLandingOptions {
   finalTarget: number;
@@ -56,6 +49,7 @@ function evaluateAt(
       ...baseParams,
       fixedMonthlyWithdrawal: goGoMonthly,
       withdrawalLimitSchedule: buildZeroLandingSchedule(goGoMonthly, curve),
+      zeroLandingCurve: curve,
     },
     seed,
   );

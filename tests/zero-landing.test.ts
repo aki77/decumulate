@@ -265,6 +265,38 @@ test("findZeroLandingMonthly - Slow-Go 開始 70 歳にすると Go-Go 月額は
   );
 });
 
+test("findZeroLandingMonthly - ソルバー結果から withdrawalLimitSteps 3段が正しく生成される", () => {
+  const result = findZeroLandingMonthly(BASE_PARAMS, {
+    finalTarget: 0,
+    curve: DEFAULT_CURVE,
+    seed: TEST_SEED,
+  });
+  assert.strictEqual(result.boundary, "found");
+
+  const MAN = 10000;
+  const goGoMonthly = Math.round(result.monthlyAmount / 1000) * 1000;
+  const schedule = buildZeroLandingSchedule(goGoMonthly, DEFAULT_CURVE);
+  const steps = schedule.map((s) => ({
+    untilAge: s.untilAge,
+    floorMan: s.floor != null ? s.floor / MAN : null,
+    ceilingMan: s.ceiling != null ? s.ceiling / MAN : null,
+  }));
+
+  assert.strictEqual(steps.length, 3);
+  assert.ok(steps[0]!.floorMan! > 0, "GoGo floor should be positive");
+  assert.strictEqual(steps[0]!.floorMan, steps[0]!.ceilingMan, "GoGo: floor === ceiling");
+  assert.strictEqual(steps[0]!.untilAge, DEFAULT_CURVE.slowGoStartAge - 1);
+  assert.ok(
+    Math.abs(steps[1]!.floorMan! - (goGoMonthly / MAN) * DEFAULT_CURVE.slowGoCoef) < 0.01,
+    `SlowGo floor should be goGoMan × coef but got ${steps[1]!.floorMan}`,
+  );
+  assert.strictEqual(steps[1]!.floorMan, steps[1]!.ceilingMan, "SlowGo: floor === ceiling");
+  assert.strictEqual(steps[1]!.untilAge, DEFAULT_CURVE.noGoStartAge - 1);
+  assert.strictEqual(steps[2]!.floorMan, DEFAULT_CURVE.noGoMonthly / MAN, "NoGo floor should match noGoMonthly");
+  assert.strictEqual(steps[2]!.ceilingMan, DEFAULT_CURVE.noGoMonthly / MAN, "NoGo ceiling should match noGoMonthly");
+  assert.strictEqual(steps[2]!.untilAge, null, "NoGo row should have untilAge=null");
+});
+
 test("findZeroLandingMonthly - 計算層との整合: ソルバー結果を simulateMonteCarlo に投げ直すと同じ p50 最終残高", () => {
   const result = findZeroLandingMonthly(BASE_PARAMS, {
     finalTarget: 0,
@@ -279,10 +311,24 @@ test("findZeroLandingMonthly - 計算層との整合: ソルバー結果を simu
       inflationAdjustedWithdrawal: true,
       fixedMonthlyWithdrawal: result.monthlyAmount,
       withdrawalLimitSchedule: buildZeroLandingSchedule(result.monthlyAmount, DEFAULT_CURVE),
+      zeroLandingCurve: DEFAULT_CURVE,
     },
     result.seed,
   );
   const finalP50 = mc.yearly[mc.yearly.length - 1]!.p50;
   // seed 一致なら完全一致するはず
   assert.strictEqual(finalP50, result.finalTotal);
+});
+
+test("findZeroLandingMonthly - zeroLandingCurve あり: 動的ロジックで p50 が最終目標に着地する", () => {
+  const finalTarget = 5_000_000;
+  const result = findZeroLandingMonthly(
+    { ...BASE_PARAMS, zeroLandingCurve: DEFAULT_CURVE },
+    { finalTarget, curve: DEFAULT_CURVE, seed: TEST_SEED },
+  );
+  assert.strictEqual(result.boundary, "found");
+  assert.ok(
+    Math.abs(result.finalTotal - finalTarget) < 500_000,
+    `finalTotal=${result.finalTotal} が目標 ${finalTarget} の ±50万以内に着地しない`,
+  );
 });

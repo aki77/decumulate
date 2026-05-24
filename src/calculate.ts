@@ -72,6 +72,9 @@ export interface CalculateParams {
   // iDeCo（個人型確定拠出年金）。idecoEnabled=false の場合は無視。
   idecoEnabled: boolean;
   ideco: IdecoParams;
+
+  // DIE WITH ZERO 動的取り崩し。withdrawalMode==="zero-landing" の場合のみ使用。
+  zeroLandingCurve?: ZeroLandingCurve;
 }
 
 export interface YearlyProjection {
@@ -154,6 +157,13 @@ export interface WithdrawalLimitStep {
   untilAge: number | null;
   floor: number | null;
   ceiling: number | null;
+}
+
+export interface ZeroLandingCurve {
+  slowGoStartAge: number;
+  noGoStartAge: number;
+  slowGoCoef: number;
+  noGoMonthly: number;
 }
 
 // age に対応する floor/ceiling を取得。schedule は untilAge 昇順を想定するが、未ソートでも
@@ -477,6 +487,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     guardrailUpperPercent,
     guardrailLowerPercent,
     guardrailAdjustmentPercent,
+    zeroLandingCurve,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
@@ -518,6 +529,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
   let currentMonthlyWithdrawal = fixedMonthlyWithdrawal;
   let rateBasedMonthlyWithdrawal = 0;
   let rateWithdrawalBasis: number | null = null;
+  let zeroLandingInitialRiskSide: number | null = null;
   const isGuardrailMode = withdrawalMode === "rate-guardrail";
   const isAnyRateMode = withdrawalMode === "rate" || withdrawalMode === "rate-risk" || isGuardrailMode;
   const isZeroLanding = withdrawalMode === "zero-landing";
@@ -724,6 +736,19 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
             rateWithdrawalBasis = Math.round(riskSideForRate);
           }
           baseWithdrawal = rateBasedMonthlyWithdrawal;
+        } else if (isZeroLanding && zeroLandingCurve !== undefined) {
+          const liquidRiskSideForZL = nisaTotal + taxableRiskTotal;
+          if (zeroLandingInitialRiskSide === null) {
+            zeroLandingInitialRiskSide = liquidRiskSideForZL > 0 ? liquidRiskSideForZL : 1;
+          }
+          const ratio = liquidRiskSideForZL / zeroLandingInitialRiskSide;
+          if (ageThisYear >= zeroLandingCurve.noGoStartAge) {
+            baseWithdrawal = zeroLandingCurve.noGoMonthly * Math.pow(1 + ri, year);
+          } else if (ageThisYear >= zeroLandingCurve.slowGoStartAge) {
+            baseWithdrawal = fixedMonthlyWithdrawal * zeroLandingCurve.slowGoCoef * ratio * Math.pow(1 + ri, year);
+          } else {
+            baseWithdrawal = fixedMonthlyWithdrawal * ratio * Math.pow(1 + ri, year);
+          }
         } else {
           baseWithdrawal = currentMonthlyWithdrawal;
           if (inflationAdjustedWithdrawal) {

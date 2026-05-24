@@ -14,6 +14,7 @@ import {
   type MonthlyProjection,
   type NisaTransferInfo,
   type RebalanceInfo,
+  type ZeroLandingCurve,
 } from "./calculate.ts";
 import { sumOtherIncomeAt } from "./other-income.ts";
 import {
@@ -31,6 +32,7 @@ export interface MonteCarloParams extends CalculateParams {
   defenseVolatility: number;
   drawdownThresholdPercent: number;
   skipRebalanceOnDrawdown: boolean;
+  zeroLandingCurve?: ZeroLandingCurve;
 }
 
 export interface MonteCarloYearly {
@@ -159,6 +161,7 @@ export function simulateMonteCarlo(
     guardrailUpperPercent,
     guardrailLowerPercent,
     guardrailAdjustmentPercent,
+    zeroLandingCurve,
   } = params;
 
   const totalYears = Math.max(contributionYears, withdrawalStartYear + withdrawalYears);
@@ -312,6 +315,8 @@ export function simulateMonteCarlo(
   const cumulativeWithdrawals = new Float64Array(N);
   const rateBasedMonthlyWithdrawal = new Float64Array(N);
   const rateWithdrawalInitialized = new Uint8Array(N);
+  // zero-landing 動的計算: 取り崩し開始月のリスクサイド資産をパスごとに記録
+  const pathInitialRiskSide = isZeroLanding ? new Float64Array(N) : null;
   const currentMonthlyWithdrawal = new Float64Array(N).fill(
     fixedMonthlyWithdrawal * preWithdrawalDeflation,
   );
@@ -440,8 +445,14 @@ export function simulateMonteCarlo(
     const isWithdrawing =
       year > withdrawalStartYear && year <= withdrawalStartYear + withdrawalYears;
     const isFirstWithdrawalYear = year === withdrawalStartYear + 1;
-    const dr = resolveDefenseRatio(currentAge + year, currentAge, targetDefenseRatioStart, targetDefenseRatioEnd, glidePathEndAge);
+    const ageThisYear = currentAge + year;
+    const dr = resolveDefenseRatio(ageThisYear, currentAge, targetDefenseRatioStart, targetDefenseRatioEnd, glidePathEndAge);
     const checkDrawdown = priorityOnDrawdown && (isWithdrawing || skipRebalanceWhenDrawdown);
+    // zero-landing フェーズ判定: 年ごとに1回だけ評価し、パスループ内では参照のみ
+    const isZeroLandingNoGoPhase = isZeroLanding && zeroLandingCurve !== undefined && ageThisYear >= zeroLandingCurve.noGoStartAge;
+    const isZeroLandingSlowGoPhase = isZeroLanding && !isZeroLandingNoGoPhase && zeroLandingCurve !== undefined && ageThisYear >= zeroLandingCurve.slowGoStartAge;
+    const zeroLandingSlowGoCoefResolved = zeroLandingCurve?.slowGoCoef ?? 1;
+    const zeroLandingNoGoMonthly = zeroLandingCurve?.noGoMonthly ?? fixedMonthlyWithdrawal;
     const pensionActive =
       pensionStartYearOffset != null && year >= pensionStartYearOffset && monthlyPension > 0;
     const monthPension = pensionActive ? monthlyPension : 0;
@@ -630,6 +641,10 @@ export function simulateMonteCarlo(
         if (baseTotalByPath !== null && isWithdrawalStartMonth) {
           baseTotalByPath[i] = total > 0 ? total : 1;
         }
+
+        if (pathInitialRiskSide !== null && isWithdrawalStartMonth) {
+          pathInitialRiskSide[i] = riskSide > 0 ? riskSide : 1;
+        }
         if (sequenceReturns !== null && isSeqWindowEnd) {
           sequenceReturns[i] = total / baseTotalByPath![i]! - 1;
         }
@@ -675,6 +690,15 @@ export function simulateMonteCarlo(
               rateWithdrawalInitialized[i] = 1;
             }
             baseWithdrawal = rateBasedMonthlyWithdrawal[i]!;
+          } else if (isZeroLanding && pathInitialRiskSide !== null && pathInitialRiskSide[i]! > 0) {
+            const ratio = riskSide / pathInitialRiskSide[i]!;
+            if (isZeroLandingNoGoPhase) {
+              baseWithdrawal = zeroLandingNoGoMonthly;
+            } else if (isZeroLandingSlowGoPhase) {
+              baseWithdrawal = fixedMonthlyWithdrawal * zeroLandingSlowGoCoefResolved * ratio;
+            } else {
+              baseWithdrawal = fixedMonthlyWithdrawal * ratio;
+            }
           } else {
             baseWithdrawal = currentMonthlyWithdrawal[i]!;
           }

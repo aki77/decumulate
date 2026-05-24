@@ -914,3 +914,54 @@ test("simulateMonteCarlo - pivotMonthlies の baseWithdrawal は年金控除前�
     );
   }
 });
+
+test("zero-landing 動的取り崩し: zeroLandingCurve あり・下振れ(p10)では baseWithdrawal が floor に近づく", () => {
+  const goGoMonthly = 200_000;
+  const floor = 100_000;
+  const ceiling = 250_000;
+  const curve = { slowGoStartAge: 75, noGoStartAge: 85, slowGoCoef: 0.8, noGoMonthly: floor };
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    initialNisa: 50_000_000,
+    withdrawalYears: 30,
+    withdrawalMode: "zero-landing",
+    inflationAdjustedWithdrawal: true,
+    fixedMonthlyWithdrawal: goGoMonthly,
+    withdrawalLimitSchedule: [
+      { untilAge: 74, floor, ceiling },
+      { untilAge: 84, floor, ceiling: Math.round(goGoMonthly * 0.8) },
+      { untilAge: null, floor, ceiling: floor },
+    ],
+    zeroLandingCurve: curve,
+  };
+  const result = simulateMonteCarlo(params, SEED);
+  const p10 = result.pivotMonthlies.p10;
+  const goGoRows = p10.filter((r) => r.age !== null && r.age < 75 && r.age >= 40);
+  assert.ok(goGoRows.length > 0, "Go-Go 期の p10 行が存在する");
+  const avgBase = goGoRows.reduce((s, r) => s + r.baseWithdrawal, 0) / goGoRows.length;
+  assert.ok(
+    avgBase < goGoMonthly,
+    `p10 の Go-Go 期 baseWithdrawal 平均 ${Math.round(avgBase)} が基準月額 ${goGoMonthly} 未満になるはず（下振れ）`,
+  );
+});
+
+test("zero-landing 動的取り崩し: zeroLandingCurve なし（旧挙動）では baseWithdrawal が fixedMonthlyWithdrawal に固定される", () => {
+  const goGoMonthly = 200_000;
+  const params: MonteCarloParams = {
+    ...BASE_PARAMS,
+    initialNisa: 50_000_000,
+    withdrawalYears: 10,
+    withdrawalMode: "zero-landing",
+    inflationAdjustedWithdrawal: true,
+    fixedMonthlyWithdrawal: goGoMonthly,
+    withdrawalLimitSchedule: [{ untilAge: null, floor: goGoMonthly, ceiling: goGoMonthly }],
+  };
+  const result = simulateMonteCarlo(params, SEED);
+  const p50 = result.pivotMonthlies.p50;
+  for (const row of p50) {
+    assert.ok(
+      Math.abs(row.baseWithdrawal - goGoMonthly) <= 1,
+      `zeroLandingCurve なし: baseWithdrawal=${row.baseWithdrawal} は ${goGoMonthly} に固定のはず`,
+    );
+  }
+});

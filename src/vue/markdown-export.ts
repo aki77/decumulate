@@ -162,6 +162,14 @@ function sectionPensionAndOtherIncome(state: ParamsState): string {
 
 function sectionWithdrawalConstraints(state: ParamsState): string {
   const lines: string[] = ["### 取り崩し制約"];
+  if (state.withdrawalMode === "zero-landing") {
+    lines.push(
+      `- DIE WITH ZERO ソルバー: 想定寿命時残高目標 ${state.finalTargetMan} 万（実質値） / Slow-Go 開始 ${state.slowGoStartAge} 歳 / No-Go 開始 ${state.noGoStartAge} 歳 / Slow-Go 係数 ${state.slowGoCoefPercent}% / No-Go 床 ${state.minMonthlyWithdrawalMan} 万`,
+    );
+    lines.push(
+      `- 動的取り崩し: 毎年「Go-Go月額 × (現リスクサイド ÷ 取り崩し開始時リスクサイド)」を base として再計算し、Slow-Go 期は × Slow-Go 係数、No-Go 期は最低月額（固定）を適用した後、下限・上限でクランプ`,
+    );
+  }
   // floor/ceiling が一度も指定されていないなら省略。0 と null は同じ意味として扱う（未入力）。
   const hasAnyLimit = state.withdrawalLimitSteps.some(
     (s) => (s.floorMan != null && s.floorMan !== 0) || (s.ceilingMan != null && s.ceilingMan !== 0),
