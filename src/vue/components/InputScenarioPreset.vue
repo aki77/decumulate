@@ -5,23 +5,45 @@ const { initiallyOpen = true } = defineProps<{ initiallyOpen?: boolean }>();
 const emit = defineEmits<{
   applyScenarioPreset: [index: number];
 }>();
+
+const indexedPresets = SCENARIO_PRESETS.map((s, i) => ({ ...s, index: i }));
+const lifestagePresets = indexedPresets.filter((s) => s.group === "lifestage");
+const strategyPresets = indexedPresets.filter((s) => s.group === "strategy");
 </script>
 
 <template>
   <details class="field-group scenario-preset-group" :open="initiallyOpen || undefined">
     <summary class="scenario-summary"><h3>よくある設定から始める <span class="scenario-chevron">▶</span></h3></summary>
     <p class="scenario-hint">典型的なシナリオを選ぶとすべてのフィールドが自動入力されます。</p>
-    <div class="scenario-buttons">
-      <button
-        v-for="(scenario, index) in SCENARIO_PRESETS"
-        :key="index"
-        type="button"
-        class="scenario-button"
-        @click="emit('applyScenarioPreset', index)"
-      >
-        <span class="scenario-label">{{ scenario.label }}</span>
-        <span class="scenario-desc">{{ scenario.description }}</span>
-      </button>
+    <div class="scenario-group">
+      <h4 class="scenario-group-label">ライフステージ別</h4>
+      <div class="scenario-buttons">
+        <button
+          v-for="scenario in lifestagePresets"
+          :key="scenario.index"
+          type="button"
+          class="scenario-button"
+          @click="emit('applyScenarioPreset', scenario.index)"
+        >
+          <span class="scenario-label">{{ scenario.label }}</span>
+          <span class="scenario-desc">{{ scenario.description }}</span>
+        </button>
+      </div>
+    </div>
+    <div class="scenario-group">
+      <h4 class="scenario-group-label">戦略デモ</h4>
+      <div class="scenario-buttons">
+        <button
+          v-for="scenario in strategyPresets"
+          :key="scenario.index"
+          type="button"
+          class="scenario-button"
+          @click="emit('applyScenarioPreset', scenario.index)"
+        >
+          <span class="scenario-label">{{ scenario.label }}</span>
+          <span class="scenario-desc">{{ scenario.description }}</span>
+        </button>
+      </div>
     </div>
   </details>
 </template>
@@ -63,6 +85,23 @@ const emit = defineEmits<{
   font-size: 12px;
   color: var(--muted);
   margin: 0 0 12px;
+}
+
+.scenario-group {
+  margin-bottom: 12px;
+}
+
+.scenario-group:last-child {
+  margin-bottom: 0;
+}
+
+.scenario-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 6px;
 }
 
 .scenario-buttons {

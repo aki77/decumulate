@@ -51,16 +51,24 @@ export const DEFENSE_PRESETS: Record<string, DefensePreset | null> = {
   cash: { label: "現金・普通預金", annualReturnRate: 0.1, volatility: 0 },
 };
 
+export type ScenarioPresetGroup = "lifestage" | "strategy";
+
 export interface ScenarioPreset {
   label: string;
   description: string;
-  params: Partial<Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps">>;
+  group: ScenarioPresetGroup;
+  params: Partial<Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps">> & {
+    withdrawalLimitSteps?: WithdrawalLimitStepInput[];
+    otherIncomes?: OtherIncomeEntry[];
+  };
 }
 
 export const SCENARIO_PRESETS: ScenarioPreset[] = [
+  // ── ライフステージ軸 ──────────────────────────────────────
   {
-    label: "積立スタート（30代・独身）",
-    description: "年齢30、月5万積立、NISA活用、取り崩し35年後〜25年",
+    label: "積立スタート（30代・独身・会社員）",
+    description: "年齢30、月6万積立＋iDeCo2.3万、厚生年金15万/月（65歳）、月額固定取り崩し100歳まで",
+    group: "lifestage",
     params: {
       currentAge: 30,
       initialNisaMan: 0,
@@ -70,21 +78,31 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
       initialDefenseMan: 0,
       nisaInitialLifetimeUsedMan: 0,
       isCoupled: false,
-      monthlyContributionMan: 5,
+      monthlyContributionMan: 6,
       productPreset: "allcountry",
       inflationRate: 2,
       contributionYears: 35,
       withdrawalStartYear: 35,
-      withdrawalYears: 25,
+      withdrawalYears: 35,
       withdrawalMode: "amount",
-      fixedMonthlyWithdrawalMan: 15,
-      basePensionMan: 6,
+      fixedMonthlyWithdrawalMan: 18,
+      inflationAdjustedWithdrawal: true,
+      basePensionMan: 15,
       pensionStartAge: 65,
+      idecoEnabled: true,
+      initialIdecoMan: 0,
+      initialIdecoGainMan: 0,
+      idecoMonthlyContributionMan: 2.3,
+      idecoContributionYears: 30,
+      idecoReceiveStartAge: 65,
+      idecoLumpSumRatio: 100,
+      idecoPensionYears: 10,
     },
   },
   {
-    label: "積立ピーク（40代・夫婦）",
-    description: "年齢43、月10万積立、夫婦モード、取り崩し22年後〜25年",
+    label: "積立ピーク（40代・夫婦共働き）",
+    description: "年齢43、月10万積立＋iDeCo夫婦4.6万、厚労省モデル年金23万/月（夫婦）、月額固定取り崩し95歳まで",
+    group: "lifestage",
     params: {
       currentAge: 43,
       initialNisaMan: 300,
@@ -99,24 +117,34 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
       inflationRate: 2,
       contributionYears: 22,
       withdrawalStartYear: 22,
-      withdrawalYears: 25,
+      withdrawalYears: 30,
       withdrawalMode: "amount",
-      fixedMonthlyWithdrawalMan: 25,
-      basePensionMan: 12,
+      fixedMonthlyWithdrawalMan: 28,
+      inflationAdjustedWithdrawal: true,
+      basePensionMan: 23,
       pensionStartAge: 65,
+      idecoEnabled: true,
+      initialIdecoMan: 0,
+      initialIdecoGainMan: 0,
+      idecoMonthlyContributionMan: 4.6,
+      idecoContributionYears: 22,
+      idecoReceiveStartAge: 65,
+      idecoLumpSumRatio: 100,
+      idecoPensionYears: 10,
     },
   },
   {
-    label: "リタイア直前（55歳）",
-    description: "年齢55、積立5万、リスク資産2000万、取り崩し10年後〜30年",
+    label: "リタイア直前（55歳・会社員）",
+    description: "年齢55、月5万積立、防衛資産厚め（Bond Tent進行中）、ガードレール戦略で取り崩し95歳まで",
+    group: "lifestage",
     params: {
       currentAge: 55,
-      initialNisaMan: 800,
-      initialNisaGainMan: 200,
-      initialTaxableRiskMan: 1000,
-      initialTaxableRiskGainMan: 300,
-      initialDefenseMan: 300,
-      nisaInitialLifetimeUsedMan: 800,
+      initialNisaMan: 600,
+      initialNisaGainMan: 150,
+      initialTaxableRiskMan: 800,
+      initialTaxableRiskGainMan: 200,
+      initialDefenseMan: 600,
+      nisaInitialLifetimeUsedMan: 600,
       isCoupled: false,
       monthlyContributionMan: 5,
       productPreset: "allcountry",
@@ -124,22 +152,28 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
       contributionYears: 10,
       withdrawalStartYear: 10,
       withdrawalYears: 30,
-      withdrawalMode: "amount",
-      fixedMonthlyWithdrawalMan: 20,
-      basePensionMan: 7,
+      withdrawalMode: "rate-guardrail",
+      withdrawalRate: 4,
+      guardrailUpperPercent: 20,
+      guardrailLowerPercent: 20,
+      guardrailAdjustmentPercent: 10,
+      fixedMonthlyWithdrawalMan: 22,
+      inflationAdjustedWithdrawal: true,
+      basePensionMan: 15,
       pensionStartAge: 65,
     },
   },
   {
-    label: "取り崩し開始（60歳）",
-    description: "年齢60、積立なし、リスク資産3000万、即時取り崩し・月25万",
+    label: "取り崩し開始（65歳・退職直後）",
+    description: "年齢65、積立なし、退職金含む防衛資産1300万、厚生年金15万/月、月額固定取り崩し95歳まで",
+    group: "lifestage",
     params: {
-      currentAge: 60,
+      currentAge: 65,
       initialNisaMan: 1500,
       initialNisaGainMan: 500,
-      initialTaxableRiskMan: 1000,
+      initialTaxableRiskMan: 1200,
       initialTaxableRiskGainMan: 300,
-      initialDefenseMan: 500,
+      initialDefenseMan: 1300,
       nisaInitialLifetimeUsedMan: 1500,
       isCoupled: false,
       monthlyContributionMan: 0,
@@ -149,9 +183,97 @@ export const SCENARIO_PRESETS: ScenarioPreset[] = [
       withdrawalStartYear: 0,
       withdrawalYears: 30,
       withdrawalMode: "amount",
-      fixedMonthlyWithdrawalMan: 25,
-      basePensionMan: 7,
+      fixedMonthlyWithdrawalMan: 18,
+      inflationAdjustedWithdrawal: true,
+      basePensionMan: 15,
       pensionStartAge: 65,
+    },
+  },
+  // ── 戦略デモ軸 ──────────────────────────────────────────
+  {
+    label: "DIE WITH ZERO（60歳・使い切る）",
+    description: "年齢60、Go-Go/Slow-Go/No-Go段階取り崩し、残高200万で着地、厚生年金15万/月",
+    group: "strategy",
+    params: {
+      currentAge: 60,
+      initialNisaMan: 1200,
+      initialNisaGainMan: 400,
+      initialTaxableRiskMan: 1000,
+      initialTaxableRiskGainMan: 250,
+      initialDefenseMan: 800,
+      nisaInitialLifetimeUsedMan: 1800,
+      isCoupled: false,
+      monthlyContributionMan: 0,
+      productPreset: "allcountry",
+      inflationRate: 2,
+      contributionYears: 0,
+      withdrawalStartYear: 0,
+      withdrawalYears: 30,
+      withdrawalMode: "zero-landing",
+      fixedMonthlyWithdrawalMan: 30,
+      inflationAdjustedWithdrawal: true,
+      basePensionMan: 15,
+      pensionStartAge: 65,
+      slowGoStartAge: 75,
+      noGoStartAge: 85,
+      slowGoCoefPercent: 75,
+      minMonthlyWithdrawalMan: 18,
+      finalTargetMan: 200,
+    },
+  },
+  {
+    label: "FIRE（45歳・早期リタイア）",
+    description: "年齢45、資産6000万＋副業15万/月（〜65歳）、生活費25万/月・下限25万、年金13万/月（65歳〜）、100歳まで",
+    group: "strategy",
+    params: {
+      currentAge: 45,
+      initialNisaMan: 1800,
+      initialNisaGainMan: 500,
+      initialTaxableRiskMan: 4000,
+      initialTaxableRiskGainMan: 1000,
+      initialDefenseMan: 200,
+      nisaInitialLifetimeUsedMan: 1800,
+      isCoupled: false,
+      monthlyContributionMan: 0,
+      productPreset: "allcountry",
+      inflationRate: 2,
+      contributionYears: 0,
+      withdrawalStartYear: 0,
+      withdrawalYears: 55,
+      withdrawalMode: "rate-risk",
+      withdrawalRate: 4.0,
+      fixedMonthlyWithdrawalMan: 15,
+      inflationAdjustedWithdrawal: true,
+      basePensionMan: 13,
+      pensionStartAge: 65,
+      withdrawalLimitSteps: [{ untilAge: null, floorMan: 25, ceilingMan: null }],
+      otherIncomes: [{ id: "fire-side-income", label: "副業・フリーランス収入", amountMan: 15, amountMode: "monthly", startAge: 45, endAge: 65 }],
+    },
+  },
+  {
+    label: "年金繰下げ70歳（手取り最大化）",
+    description: "年齢65、65〜70歳は資産を多め取り崩し、70歳以降は繰下げ年金21.3万/月で生活費を賄う",
+    group: "strategy",
+    params: {
+      currentAge: 65,
+      initialNisaMan: 1500,
+      initialNisaGainMan: 500,
+      initialTaxableRiskMan: 1200,
+      initialTaxableRiskGainMan: 300,
+      initialDefenseMan: 1300,
+      nisaInitialLifetimeUsedMan: 1500,
+      isCoupled: false,
+      monthlyContributionMan: 0,
+      productPreset: "allcountry",
+      inflationRate: 2,
+      contributionYears: 0,
+      withdrawalStartYear: 0,
+      withdrawalYears: 30,
+      withdrawalMode: "amount",
+      fixedMonthlyWithdrawalMan: 23,
+      inflationAdjustedWithdrawal: true,
+      basePensionMan: 21.3,
+      pensionStartAge: 70,
     },
   },
 ];
@@ -397,7 +519,14 @@ export function useParams() {
   function applyScenarioPreset(index: number): void {
     const scenario = SCENARIO_PRESETS[index];
     if (!scenario) return;
+    Object.assign(state, { ...DEFAULT_PARAMS });
     Object.assign(state, scenario.params);
+    if (scenario.params.withdrawalLimitSteps) {
+      state.withdrawalLimitSteps = scenario.params.withdrawalLimitSteps;
+    }
+    if (scenario.params.otherIncomes) {
+      state.otherIncomes = scenario.params.otherIncomes;
+    }
     if (scenario.params.productPreset) {
       applyProductPreset(scenario.params.productPreset);
     }
