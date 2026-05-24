@@ -33,7 +33,7 @@ function onPresetChange(e: Event) {
     <div class="field">
       <label for="annualReturnRate">
         想定利回り（%/年）
-        <HelpIcon text="年あたりの期待リターン。インデックス投信なら過去実績ベースで 5〜10% 程度が目安。" />
+        <HelpIcon text="年あたりの名目期待リターン（インフレ込み）。内部ではここからインフレ率を引いた実質リターンで運用する。インデックス投信なら過去実績ベースで 5〜10% 程度が目安。" />
       </label>
       <InputNumber id="annualReturnRate" v-model="state.annualReturnRate" min="0" max="15" step="0.1" />
     </div>
@@ -54,7 +54,7 @@ function onPresetChange(e: Event) {
     <div class="field">
       <label for="inflationRate">
         インフレ率（%/年）
-        <HelpIcon text="物価上昇率。実質値（購買力）を計算する際に名目値から差し引く。" />
+        <HelpIcon text="物価上昇率。実質値（購買力）を計算する際に名目値から差し引く。日銀目標 2% がデフォルト（過去 30 年の日本実績は〜0.5% 程度）。" />
       </label>
       <InputNumber id="inflationRate" v-model="state.inflationRate" min="0" max="10" step="0.1" />
     </div>

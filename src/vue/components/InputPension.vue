@@ -20,7 +20,7 @@ const periodUnit = computed(() => (state.value.currentAge != null ? "歳" : "年
     <div class="field field--full">
       <label for="basePension">
         年金月額（65歳基準, 額面, 万円）
-        <HelpIcon text="65歳開始時の額面（税・社会保険控除前）月額。受給開始年齢を変えると繰上げ/繰下げで自動調整される。" />
+        <HelpIcon text="65歳開始時の額面（税・社会保険控除前）月額。受給開始年齢を変えると繰上げ/繰下げで自動調整される。内部計算では手取り = 額面 × 85%（税・社保のざっくり想定）として処理する。" />
       </label>
       <InputNumber id="basePension" v-model="state.basePensionMan" min="0" step="1" />
       <div class="preset-buttons">
