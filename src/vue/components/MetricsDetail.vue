@@ -18,6 +18,7 @@ const metrics = useMetrics(
   () => props.yearly,
   () => props.params,
   () => props.finalTargetYen ?? 0,
+  () => props.mc.finalP50,
 );
 
 const isDieWithZero = computed(() => props.params.withdrawalMode === "zero-landing");
@@ -87,7 +88,7 @@ const statusLabel: Record<DieWithZeroStatus, string> = {
       <div class="metric-grid">
         <div class="metric">
           <div class="metric-label">
-            想定寿命（{{ metrics.lifeExpectancyAge }}歳）時残高<HelpIcon :text="HELP.finalAtLifeExpectancy" />
+            想定寿命（{{ metrics.lifeExpectancyAge }}歳）時残高（p50・実質）<HelpIcon :text="HELP.finalAtLifeExpectancy" />
           </div>
           <div class="metric-value">{{ formatMan(metrics.finalTotalAtLifeExpectancy) }}</div>
         </div>

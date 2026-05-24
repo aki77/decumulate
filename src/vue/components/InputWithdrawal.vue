@@ -82,8 +82,8 @@ defineEmits<{
       </div>
       <div class="field">
         <label for="finalTarget">
-          最終残高目標（万円）
-          <HelpIcon text="想定寿命時に残しておきたい資産。0 なら純粋な DIE WITH ZERO。生前贈与しきれない遺産や葬式代等を見込むなら数百万〜数千万を入力。" />
+          最終残高目標（万円・実質値）
+          <HelpIcon text="想定寿命時に残しておきたい資産。**実質値（インフレ控除後）で入力**してください。DIE WITH ZERO ソルバーは MC の p50（中央値・実質値）経路でこの目標残高に着地する Go-Go 月額を逆算します。0 なら純粋な DIE WITH ZERO、生前贈与しきれない遺産や葬式代等を見込むなら数百万〜数千万を入力。" />
         </label>
         <InputNumber id="finalTarget" v-model="state.finalTargetMan" min="0" step="100" />
       </div>
