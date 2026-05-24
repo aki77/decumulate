@@ -38,16 +38,16 @@ export interface DefensePreset {
 
 export const PRESETS: Record<string, Preset | null> = {
   custom: null,
-  allcountry: { label: "全世界（オルカン）", annualReturnRate: 7.5, expenseRatio: 0.05775, volatility: 15 },
-  sp500: { label: "S&P500", annualReturnRate: 10, expenseRatio: 0.0814, volatility: 18 },
-  qqq: { label: "QQQ", annualReturnRate: 12, expenseRatio: 0.2, volatility: 22 },
-  nikkei: { label: "日経平均", annualReturnRate: 7.5, expenseRatio: 0.143, volatility: 20 },
-  topix: { label: "TOPIX", annualReturnRate: 6, expenseRatio: 0.143, volatility: 18 },
+  allcountry: { label: "全世界（オルカン）", annualReturnRate: 6.0, expenseRatio: 0.05775, volatility: 17 },
+  sp500: { label: "S&P500", annualReturnRate: 7.0, expenseRatio: 0.0814, volatility: 20 },
+  qqq: { label: "QQQ", annualReturnRate: 8.0, expenseRatio: 0.2, volatility: 25 },
+  nikkei: { label: "日経平均", annualReturnRate: 5.5, expenseRatio: 0.143, volatility: 20 },
+  topix: { label: "TOPIX", annualReturnRate: 5.0, expenseRatio: 0.143, volatility: 18 },
 };
 
 export const DEFENSE_PRESETS: Record<string, DefensePreset | null> = {
   custom: null,
-  jgb10: { label: "個人向け国債変動10年", annualReturnRate: 0.5, volatility: 0 },
+  jgb10: { label: "個人向け国債変動10年", annualReturnRate: 0.8, volatility: 0 },
   cash: { label: "現金・普通預金", annualReturnRate: 0.1, volatility: 0 },
 };
 
