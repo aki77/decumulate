@@ -102,8 +102,8 @@ function sectionInputBasic(state: ParamsState): string {
     `- インフレ率: ${formatNumber(state.inflationRate)}% / 実質取崩: ${state.inflationAdjustedWithdrawal ? "ON" : "OFF"}`,
     "",
     "### 利回り・ボラティリティ",
-    `- リスク資産: 年率 ${formatNumber(state.annualReturnRate)}% / σ ${formatNumber(state.volatility)}% / 経費率 ${formatNumber(state.expenseRatio, 3)}%（プリセット: ${presetLabel(state.productPreset)}）`,
-    `- 防衛資産: 年率 ${formatNumber(state.defenseAnnualReturnRate)}% / σ ${formatNumber(state.defenseVolatility)}%（プリセット: ${defensePresetLabel(state.defenseProductPreset)}）`,
+    `- リスク資産: 年率 ${formatNumber(state.annualReturnRate)}%（名目） / σ ${formatNumber(state.volatility)}% / 経費率 ${formatNumber(state.expenseRatio, 3)}%（プリセット: ${presetLabel(state.productPreset)}）`,
+    `- 防衛資産: 年率 ${formatNumber(state.defenseAnnualReturnRate)}%（名目） / σ ${formatNumber(state.defenseVolatility)}%（プリセット: ${defensePresetLabel(state.defenseProductPreset)}）`,
   ].join("\n");
 }
 
@@ -306,6 +306,7 @@ function sectionGlossary(state: ParamsState): string {
   const lines: string[] = [
     "## メトリクス用語の説明",
     "",
+    "- **名目 / 実質**: 名目=インフレ控除前の額面、実質=インフレ控除後の購買力ベース。入力の「年率」「σ」は名目、「インフレ率」は独立入力。決定論シナリオは名目のまま出力、モンテカルロは `monthlyDrift = (μ - インフレ率 - σ²/2) / 12` で実質化し出力も実質値（各メトリクス末尾の単位注記を参照）。",
     "- **積立元本合計**: 初期投資額 + 月額積立 × 12 × 積立年数。",
     "- **運用益（税引後）**: 最終時点の元本超過分。課税口座は税引後。",
     "- **MC P10 / P50 / P90**: モンテカルロ 5,000 試行の最終資産分布の下位10% / 中央値 / 上位10%。インフレ控除後の実質値。",
@@ -331,6 +332,7 @@ function sectionFootnotes(): string {
     "- 計算はブラウザ内で完結（外部送信なし）",
     "- 退職金との受給間隔ルール（2026年改正 5→10年、退職金先行は 19年）は厳密にモデル化していない",
     "- 税制は 2025年改正後の速算表ベース",
+    "- リスク/防衛資産の「年率」は**名目値**として入力する規約。モンテカルロ側で別途インフレ率を控除して実質化しているため、入力の名目年率を単独で「楽観/保守」と判定しないこと（例: 名目6% + インフレ2% ≒ 実質4%）",
     "- 過去の市場データやリスクを保証するものではない",
   ].join("\n");
 }

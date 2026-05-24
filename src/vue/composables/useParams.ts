@@ -377,8 +377,8 @@ export function useParams() {
         state.withdrawalLimitSteps = buildZeroLandingSchedule(goGoMonthly, extractZeroLandingCurve(state)).map(
           (s) => ({
             untilAge: s.untilAge,
-            floorMan: s.floor != null ? s.floor / MAN : null,
-            ceilingMan: s.ceiling != null ? s.ceiling / MAN : null,
+            floorMan: s.floor != null ? Math.round(s.floor / MAN) : null,
+            ceilingMan: s.ceiling != null ? Math.round(s.ceiling / MAN) : null,
           }),
         );
       }
