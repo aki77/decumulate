@@ -2,21 +2,6 @@
 
 積立 → 取り崩しの資産推移をモンテカルロ法（5,000パス）で評価する、Vue3 + TypeScript のシミュレータです。すべての計算はブラウザ内で完結し、データは外部送信されません。
 
-参考: [asset-melt.party](https://asset-melt.party/) / [hiroppy/mf-dashboard](https://github.com/hiroppy/mf-dashboard/tree/main/apps/simulator)
-
-## ローカルで開く
-
-```sh
-pnpm install
-pnpm dev
-```
-
-ブラウザで `http://localhost:5173/` を開きます。
-
-## GitHub Pages へのデプロイ
-
-リポジトリ Settings → Pages → Build and deployment の Source を **GitHub Actions** に設定してください。`main` ブランチに push すると、`.github/workflows/deploy.yml` が自動でデプロイします。
-
 ## 機能
 
 ### 取り崩し戦略（5 モード）
@@ -133,3 +118,24 @@ pnpm dev
 ## 注意
 
 本ツールは投資判断や将来のリターンを保証するものではありません。あくまで参考シミュレーションです。
+
+---
+
+## 開発者向け
+
+### ローカルで開く
+
+```sh
+pnpm install
+pnpm dev
+```
+
+ブラウザで `http://localhost:5173/` を開きます。
+
+### GitHub Pages へのデプロイ
+
+リポジトリ Settings → Pages → Build and deployment の Source を **GitHub Actions** に設定してください。`main` ブランチに push すると、`.github/workflows/deploy.yml` が自動でデプロイします。
+
+## 参考
+
+[asset-melt.party](https://asset-melt.party/) / [hiroppy/mf-dashboard](https://github.com/hiroppy/mf-dashboard/tree/main/apps/simulator)
