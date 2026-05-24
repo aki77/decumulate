@@ -92,6 +92,7 @@ onBeforeUnmount(() => chart?.destroy());
 <template>
   <div class="chart-block">
     <h3>積立・取り崩しの推移（決定論的, 名目値）</h3>
+    <p class="chart-subtitle">口座残高のおおよそのイメージ（将来の円で表示）</p>
     <div class="chart-wrap">
       <canvas ref="canvas"></canvas>
     </div>

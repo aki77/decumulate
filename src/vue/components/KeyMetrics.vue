@@ -32,14 +32,17 @@ const metrics = useMetrics(() => props.yearly, () => props.params);
     <div class="metric">
       <div class="metric-label">MC 中央値残高（実質）<HelpIcon :text="HELP.mcP50" /></div>
       <div class="metric-value">{{ formatMan(mc.finalP50) }}</div>
+      <div class="metric-note">今の購買力に換算した予測中央値</div>
     </div>
     <div class="metric">
       <div class="metric-label">枯渇確率<HelpIcon :text="HELP.depletion" /></div>
       <div class="metric-value">{{ formatPercent(mc.depletionProbability) }}</div>
+      <div class="metric-note">取り崩し中に資産がゼロになる確率</div>
     </div>
     <div class="metric">
       <div class="metric-label">元本割れ確率<HelpIcon :text="HELP.failure" /></div>
       <div class="metric-value">{{ formatPercent(mc.failureProbability) }}</div>
+      <div class="metric-note">最終時点で積立元本を下回る確率</div>
     </div>
   </div>
 </template>
@@ -47,5 +50,11 @@ const metrics = useMetrics(() => props.yearly, () => props.params);
 <style scoped>
 .metric-grid {
   margin-bottom: 16px;
+}
+
+.metric-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
 }
 </style>

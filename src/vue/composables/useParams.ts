@@ -51,6 +51,111 @@ export const DEFENSE_PRESETS: Record<string, DefensePreset | null> = {
   cash: { label: "現金・普通預金", annualReturnRate: 0.1, volatility: 0 },
 };
 
+export interface ScenarioPreset {
+  label: string;
+  description: string;
+  params: Partial<Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps">>;
+}
+
+export const SCENARIO_PRESETS: ScenarioPreset[] = [
+  {
+    label: "積立スタート（30代・独身）",
+    description: "年齢30、月5万積立、NISA活用、取り崩し35年後〜25年",
+    params: {
+      currentAge: 30,
+      initialNisaMan: 0,
+      initialNisaGainMan: 0,
+      initialTaxableRiskMan: 0,
+      initialTaxableRiskGainMan: 0,
+      initialDefenseMan: 0,
+      nisaInitialLifetimeUsedMan: 0,
+      isCoupled: false,
+      monthlyContributionMan: 5,
+      productPreset: "allcountry",
+      inflationRate: 2,
+      contributionYears: 35,
+      withdrawalStartYear: 35,
+      withdrawalYears: 25,
+      withdrawalMode: "amount",
+      fixedMonthlyWithdrawalMan: 15,
+      basePensionMan: 6,
+      pensionStartAge: 65,
+    },
+  },
+  {
+    label: "積立ピーク（40代・夫婦）",
+    description: "年齢43、月10万積立、夫婦モード、取り崩し22年後〜25年",
+    params: {
+      currentAge: 43,
+      initialNisaMan: 300,
+      initialNisaGainMan: 50,
+      initialTaxableRiskMan: 200,
+      initialTaxableRiskGainMan: 30,
+      initialDefenseMan: 100,
+      nisaInitialLifetimeUsedMan: 300,
+      isCoupled: true,
+      monthlyContributionMan: 10,
+      productPreset: "allcountry",
+      inflationRate: 2,
+      contributionYears: 22,
+      withdrawalStartYear: 22,
+      withdrawalYears: 25,
+      withdrawalMode: "amount",
+      fixedMonthlyWithdrawalMan: 25,
+      basePensionMan: 12,
+      pensionStartAge: 65,
+    },
+  },
+  {
+    label: "リタイア直前（55歳）",
+    description: "年齢55、積立5万、リスク資産2000万、取り崩し10年後〜30年",
+    params: {
+      currentAge: 55,
+      initialNisaMan: 800,
+      initialNisaGainMan: 200,
+      initialTaxableRiskMan: 1000,
+      initialTaxableRiskGainMan: 300,
+      initialDefenseMan: 300,
+      nisaInitialLifetimeUsedMan: 800,
+      isCoupled: false,
+      monthlyContributionMan: 5,
+      productPreset: "allcountry",
+      inflationRate: 2,
+      contributionYears: 10,
+      withdrawalStartYear: 10,
+      withdrawalYears: 30,
+      withdrawalMode: "amount",
+      fixedMonthlyWithdrawalMan: 20,
+      basePensionMan: 7,
+      pensionStartAge: 65,
+    },
+  },
+  {
+    label: "取り崩し開始（60歳）",
+    description: "年齢60、積立なし、リスク資産3000万、即時取り崩し・月25万",
+    params: {
+      currentAge: 60,
+      initialNisaMan: 1500,
+      initialNisaGainMan: 500,
+      initialTaxableRiskMan: 1000,
+      initialTaxableRiskGainMan: 300,
+      initialDefenseMan: 500,
+      nisaInitialLifetimeUsedMan: 1500,
+      isCoupled: false,
+      monthlyContributionMan: 0,
+      productPreset: "allcountry",
+      inflationRate: 2,
+      contributionYears: 0,
+      withdrawalStartYear: 0,
+      withdrawalYears: 30,
+      withdrawalMode: "amount",
+      fixedMonthlyWithdrawalMan: 25,
+      basePensionMan: 7,
+      pensionStartAge: 65,
+    },
+  },
+];
+
 export interface ParamsState {
   currentAge: number;
   initialNisaMan: number;
@@ -289,6 +394,15 @@ export function useParams() {
     state.volatility = preset.volatility;
   }
 
+  function applyScenarioPreset(index: number): void {
+    const scenario = SCENARIO_PRESETS[index];
+    if (!scenario) return;
+    Object.assign(state, scenario.params);
+    if (scenario.params.productPreset) {
+      applyProductPreset(scenario.params.productPreset);
+    }
+  }
+
   function applyDefensePreset(presetKey: string): void {
     const preset = DEFENSE_PRESETS[presetKey];
     if (!preset) return;
@@ -391,6 +505,7 @@ export function useParams() {
   return {
     state,
     debouncedMcParams,
+    applyScenarioPreset,
     applyProductPreset,
     applyDefensePreset,
     addOtherIncome,

@@ -166,6 +166,7 @@ onBeforeUnmount(() => chart?.destroy());
 <template>
   <div class="chart-block">
     <h3>モンテカルロ・シミュレーション（5,000パス, 実質値）</h3>
+    <p class="chart-subtitle">今の生活水準で見た予測の幅（インフレ後の購買力で表示）</p>
     <div class="chart-wrap">
       <canvas ref="canvas"></canvas>
     </div>

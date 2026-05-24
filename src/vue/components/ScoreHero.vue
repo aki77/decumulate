@@ -18,6 +18,7 @@ const HELP = "枯渇確率・元本割れ確率・中央値残高から算出し
     <div class="score-desc">
       安心度スコア（0–100）<HelpIcon :text="HELP" />
     </div>
+    <div class="score-inline-hint">高いほど安心。80 以上を目安に。</div>
   </div>
 </template>
 
@@ -50,6 +51,15 @@ const HELP = "枯渇確率・元本割れ確率・中央値残高から算出し
 .score-desc {
   font-size: 11px;
   color: var(--muted);
+}
+
+.score-inline-hint {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: inherit;
+  opacity: 0.7;
+  margin-top: 2px;
 }
 
 .score-excellent {

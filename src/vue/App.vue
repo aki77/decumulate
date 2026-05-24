@@ -16,6 +16,7 @@ import MonthlyDetails from "./components/MonthlyDetails.vue";
 const {
   state,
   debouncedMcParams,
+  applyScenarioPreset,
   applyProductPreset,
   applyDefensePreset,
   addOtherIncome,
@@ -131,6 +132,7 @@ function handleExport() {
       :is-computing-zero-landing="isComputingZeroLanding"
       v-model="state"
       @close="closeDrawer"
+      @apply-scenario-preset="applyScenarioPreset"
       @apply-product-preset="applyProductPreset"
       @apply-defense-preset="applyDefensePreset"
       @add-other-income="addOtherIncome"

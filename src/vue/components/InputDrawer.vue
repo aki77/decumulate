@@ -10,6 +10,7 @@ import InputPeriod from "./InputPeriod.vue";
 import InputWithdrawal from "./InputWithdrawal.vue";
 import InputIdeco from "./InputIdeco.vue";
 import InputPension from "./InputPension.vue";
+import InputScenarioPreset from "./InputScenarioPreset.vue";
 
 const props = defineProps<{
   open: boolean;
@@ -29,6 +30,7 @@ const emit = defineEmits<{
   reset: [];
   export: [];
   import: [data: string];
+  applyScenarioPreset: [index: number];
 }>();
 
 function handleImport(e: Event) {
@@ -77,6 +79,7 @@ watch(
             <button type="button" class="drawer-close" aria-label="閉じる" @click="emit('close')">&#x2715;</button>
           </header>
           <div class="drawer-body">
+            <InputScenarioPreset @apply-scenario-preset="emit('applyScenarioPreset', $event)" />
             <InputBasic v-model="state" />
             <InputPortfolio v-model="state" />
             <InputProduct v-model="state" @apply-product-preset="emit('applyProductPreset', $event)" />
