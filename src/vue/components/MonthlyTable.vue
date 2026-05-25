@@ -61,6 +61,14 @@ interface BaseInfo {
   total: number;
 }
 
+interface YearEvents {
+  nisaTransfer: boolean;
+  rebalance: boolean;
+  idecoLumpSum: boolean;
+  idecoPension: boolean;
+  lifeEvent: boolean;
+}
+
 interface YearGroup {
   year: number;
   age: number | null;
@@ -69,7 +77,16 @@ interface YearGroup {
   yearlyRate: number;
   yearBand: RateBand;
   base: BaseInfo | null;
+  yearEvents: YearEvents;
 }
+
+const YEAR_EVENT_BADGES = [
+  { key: "nisaTransfer" as keyof YearEvents, symbol: "▲", label: "NISA振替", kind: "transfer", tip: "NISA振替あり" },
+  { key: "rebalance" as keyof YearEvents, symbol: "●", label: "リバランス", kind: "rebalance", tip: "リバランスあり" },
+  { key: "idecoLumpSum" as keyof YearEvents, symbol: "■", label: "iDeCo一時金", kind: "ideco-lump", tip: "iDeCo 一時金あり" },
+  { key: "idecoPension" as keyof YearEvents, symbol: "◆", label: "iDeCo年金", kind: "ideco-pension", tip: "iDeCo 年金あり" },
+  { key: "lifeEvent" as keyof YearEvents, symbol: "★", label: "ライフイベント", kind: "life-event", tip: "ライフイベントあり" },
+] as const;
 
 const showIdeco = computed(() => props.params.idecoEnabled);
 const riskColspan = computed(() => showIdeco.value ? 5 : 4);
@@ -110,7 +127,15 @@ const yearGroups = computed<YearGroup[]>(() => {
       }
       base = { summary: formatMan(total), formula, pension, other, netWithdrawal, total };
     }
-    groups.push({ year, age, rows, yearlyGain, yearlyRate, yearBand, base });
+    const yearEvents: YearEvents = { nisaTransfer: false, rebalance: false, idecoLumpSum: false, idecoPension: false, lifeEvent: false };
+    for (const r of rows) {
+      if (r.src.nisaTransferInfo != null) yearEvents.nisaTransfer = true;
+      if (r.src.rebalanceInfo != null) yearEvents.rebalance = true;
+      if (r.src.idecoLumpSumInfo != null) yearEvents.idecoLumpSum = true;
+      if (r.src.idecoPensionInfo != null) yearEvents.idecoPension = true;
+      if (r.src.lifeEventInfo != null) yearEvents.lifeEvent = true;
+    }
+    groups.push({ year, age, rows, yearlyGain, yearlyRate, yearBand, base, yearEvents });
   }
   return groups;
 });
@@ -121,6 +146,9 @@ const yearGroups = computed<YearGroup[]>(() => {
     <details class="monthly-year">
       <summary>
         {{ g.age != null ? `${g.year}年目 / ${g.age}歳` : `${g.year}年目` }}
+        <template v-for="b in YEAR_EVENT_BADGES" :key="b.key">
+          <span v-if="g.yearEvents[b.key]" class="event-badge year-event-badge" :data-kind="b.kind" tabindex="0" :aria-label="b.label">{{ b.symbol }}<span class="event-tip">{{ b.tip }}</span></span>
+        </template>
         <template v-if="g.base">
           <span class="year-summary">
             合計生活費 {{ g.base.summary }}
@@ -246,6 +274,10 @@ const yearGroups = computed<YearGroup[]>(() => {
   font-size: 13px;
   padding: 4px 0;
   color: var(--text);
+}
+
+.year-event-badge {
+  margin-left: 4px;
 }
 
 .year-summary {
