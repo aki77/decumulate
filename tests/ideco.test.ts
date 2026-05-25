@@ -54,6 +54,7 @@ const BASE_PARAMS: CalculateParams = {
   nisaInitialLifetimeUsed: 0,
   idecoEnabled: false,
   ideco: BASE_IDECO,
+  lifeEvents: [],
 };
 
 // --- retirementDeduction ---

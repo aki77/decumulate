@@ -59,6 +59,7 @@ function makeBaseState(): ParamsState {
     guardrailLowerPercent: 20,
     guardrailAdjustmentPercent: 10,
     otherIncomes: [],
+    lifeEvents: [],
   };
 }
 
@@ -112,6 +113,8 @@ function makeBaseParams(): MonteCarloParams {
       idecoLumpSumRatio: 0.5,
       idecoPensionYears: 10,
     },
+    enableJumpDiffusion: false,
+    lifeEvents: [],
   };
 }
 

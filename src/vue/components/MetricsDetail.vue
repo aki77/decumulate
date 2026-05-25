@@ -23,6 +23,9 @@ const metrics = useMetrics(
 );
 
 const isDieWithZero = computed(() => props.params.withdrawalMode === "zero-landing");
+const lifeEventTotal = computed(() =>
+  props.params.lifeEvents.reduce((s, e) => s + e.amount, 0)
+);
 </script>
 
 <template>
@@ -68,6 +71,10 @@ const isDieWithZero = computed(() => props.params.withdrawalMode === "zero-landi
       <div class="metric">
         <div class="metric-label">最大DD 下位10%（浅い）<HelpIcon :text="HELP.maxDDp10" /></div>
         <div class="metric-value">{{ formatPercent(mc.maxDrawdownP10) }}</div>
+      </div>
+      <div v-if="lifeEventTotal > 0" class="metric">
+        <div class="metric-label">ライフイベント支出累計<HelpIcon :text="HELP.lifeEventTotal" /></div>
+        <div class="metric-value">{{ formatMan(lifeEventTotal) }}</div>
       </div>
       <div class="metric">
         <div class="metric-label">シーケンスp10：5年後資産比率<HelpIcon :text="HELP.sequenceP10Ratio" /></div>

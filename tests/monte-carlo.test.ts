@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   simulateMonteCarlo,
@@ -10,6 +10,7 @@ import {
   type PercentileKey,
 } from "../src/monte-carlo.ts";
 import type { WithdrawalLimitStep } from "../src/calculate.ts";
+import { normalizeLifeEvents } from "../src/life-event.ts";
 
 // 旧 monthlyWithdrawalFloor/Ceiling テストを移行しやすくするヘルパー（終端 1 行の schedule）。
 function limit(floor: number | null, ceiling: number | null): WithdrawalLimitStep[] {
@@ -41,6 +42,7 @@ const BASE_PARAMS: MonteCarloParams = {
   pensionStartAge: 65,
   currentAge: 40,
   otherIncomes: [],
+  lifeEvents: [],
   defenseAnnualReturnRate: 0,
   defenseVolatility: 0,
   targetDefenseRatioStart: 0,
@@ -1122,3 +1124,87 @@ test("jumpOccurred: ジャンプ月は monthlyRateRisk が顕著にマイナス 
   }
 });
 
+
+// --- ライフイベント ---
+
+describe("MCライフイベント支出", () => {
+  const MAN = 10000;
+
+  test("ライフイベントあり/なしで finalP50 が下がる（サニティチェック）", () => {
+    const noEvent = simulateMonteCarlo({
+      ...BASE_PARAMS,
+      initialNisa: 5000 * MAN,
+      withdrawalYears: 20,
+      fixedMonthlyWithdrawal: 10_000,
+    }, SEED);
+    const withEvent = simulateMonteCarlo({
+      ...BASE_PARAMS,
+      initialNisa: 5000 * MAN,
+      withdrawalYears: 20,
+      fixedMonthlyWithdrawal: 10_000,
+      lifeEvents: [{ yearOffset: 5, amount: 500 * MAN, label: "大型出費" }],
+    }, SEED);
+    assert.ok(
+      withEvent.finalP50 < noEvent.finalP50,
+      `ライフイベントあり finalP50=${withEvent.finalP50} < なし finalP50=${noEvent.finalP50}`,
+    );
+  });
+
+  test("同 seed で 2 回呼んで一致（phase1/phase2 整合性）", () => {
+    const params: MonteCarloParams = {
+      ...BASE_PARAMS,
+      initialNisa: 3000 * MAN,
+      withdrawalYears: 15,
+      fixedMonthlyWithdrawal: 10_000,
+      lifeEvents: [{ yearOffset: 4, amount: 200 * MAN, label: "car" }],
+    };
+    const r1 = simulateMonteCarlo(params, SEED);
+    const r2 = simulateMonteCarlo(params, SEED);
+    assert.equal(r1.finalP50, r2.finalP50);
+    assert.equal(r1.failureProbability, r2.failureProbability);
+  });
+
+  test("実質値のまま使われる（MC はインフレ補正しない）", () => {
+    const realAmount = 100 * MAN;
+    // インフレ率 2% でも MC は実質値ベースなのでそのまま使う
+    const params: MonteCarloParams = {
+      ...BASE_PARAMS,
+      inflationRate: 2,
+      initialNisa: 3000 * MAN,
+      withdrawalYears: 15,
+      fixedMonthlyWithdrawal: 10_000,
+      lifeEvents: [{ yearOffset: 5, amount: realAmount, label: "test" }],
+    };
+    const result = simulateMonteCarlo(params, SEED);
+    // yearOffset=5 → y=5 でヒット、lifeEventExpenseByYear[5] に格納 → year=5 の m===0 でヒット
+    const eventRow = result.pivotMonthlies.p50.find((m) => m.year === 5 && m.month === 1);
+    assert.ok(eventRow?.lifeEventInfo, "lifeEventInfo が付与される");
+    // MC では名目化しないのでそのまま realAmount のはず
+    assert.equal(eventRow.lifeEventInfo!.amount, realAmount);
+  });
+
+  test("回帰: p50 経路で currentAge=40, age=70 イベントは age=70 の月次行でヒット", () => {
+    const MAN_INNER = 10000;
+    const events = normalizeLifeEvents(
+      [{ id: "1", label: "家購入", amountMan: 2000, age: 70 }],
+      40,
+      40,
+      MAN_INNER,
+    );
+    assert.equal(events.length, 1);
+    assert.equal(events[0]!.yearOffset, 30);
+    const params: MonteCarloParams = {
+      ...BASE_PARAMS,
+      currentAge: 40,
+      initialNisa: 20000 * MAN_INNER,
+      withdrawalYears: 35,
+      fixedMonthlyWithdrawal: 10_000,
+      lifeEvents: events,
+    };
+    const result = simulateMonteCarlo(params, SEED);
+    const hit = result.pivotMonthlies.p50.find((m) => m.age === 70 && m.month === 1);
+    assert.ok(hit, "p50 経路で age=70 の 1月行が存在する");
+    assert.ok(hit.lifeEventInfo, "p50 経路で age=70 行に lifeEventInfo が付与される");
+    assert.equal(hit.lifeEventInfo!.label, "家購入");
+  });
+});

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeOtherIncomes,
+  sumOtherIncomeAt,
   type OtherIncomeEntry,
 } from "../src/other-income.ts";
 
@@ -149,4 +150,35 @@ test("normalizeOtherIncomes - 複数件の正規化", () => {
 test("normalizeOtherIncomes - 空配列は空配列を返す", () => {
   const result = normalizeOtherIncomes([], 30, 50, 10000);
   assert.deepStrictEqual(result, []);
+});
+
+test("sumOtherIncomeAt - endYearOffset は inclusive（境界年に収入が発生する）", () => {
+  // startAge=35, endAge=40, currentAge=30 → startYearOffset=5, endYearOffset=10
+  const result = normalizeOtherIncomes(
+    [makeEntry({ startAge: 35, endAge: 40 })],
+    30,
+    50,
+    10000,
+  );
+  const offset = result[0]!;
+  // year=5（startAge=35）〜year=10（endAge=40）で収入あり、year=4, year=11 はゼロ
+  assert.strictEqual(sumOtherIncomeAt(result, 4), 0);
+  assert.ok(sumOtherIncomeAt(result, offset.startYearOffset) > 0);
+  assert.ok(sumOtherIncomeAt(result, offset.endYearOffset) > 0);
+  assert.strictEqual(sumOtherIncomeAt(result, 11), 0);
+});
+
+test("normalizeOtherIncomes - startAge==endAge は 1 年限定で残る（inclusive）", () => {
+  const result = normalizeOtherIncomes(
+    [makeEntry({ startAge: 35, endAge: 35 })],
+    30,
+    50,
+    10000,
+  );
+  assert.strictEqual(result.length, 1);
+  assert.strictEqual(result[0]!.startYearOffset, 5);
+  assert.strictEqual(result[0]!.endYearOffset, 5);
+  assert.ok(sumOtherIncomeAt(result, 5) > 0);
+  assert.strictEqual(sumOtherIncomeAt(result, 4), 0);
+  assert.strictEqual(sumOtherIncomeAt(result, 6), 0);
 });

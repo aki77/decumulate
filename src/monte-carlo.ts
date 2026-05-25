@@ -17,6 +17,7 @@ import {
   type ZeroLandingCurve,
 } from "./calculate.ts";
 import { sumOtherIncomeAt } from "./other-income.ts";
+import { sumLifeEventsAt } from "./life-event.ts";
 import {
   idecoEffectiveTaxRateForMC,
   idecoReceiveAge as computeIdecoReceiveAge,
@@ -160,6 +161,7 @@ export function simulateMonteCarlo(
     pensionStartAge,
     currentAge,
     otherIncomes,
+    lifeEvents,
     defenseAnnualReturnRate,
     defenseVolatility,
     targetDefenseRatioStart,
@@ -386,6 +388,7 @@ export function simulateMonteCarlo(
     idecoLumpSumInfo: IdecoPayoutEvent | null;
     idecoPensionInfo: IdecoPayoutEvent | null;
     jumpOccurred: boolean;
+    lifeEventInfo: { amount: number; label: string } | null;
   };
 
   const buildRow = (raw: RawRowInput): MonthlyProjection => {
@@ -435,6 +438,7 @@ export function simulateMonteCarlo(
       idecoLumpSumInfo: raw.idecoLumpSumInfo,
       idecoPensionInfo: raw.idecoPensionInfo,
       ...(raw.jumpOccurred ? { jumpOccurred: true } : {}),
+      ...(raw.lifeEventInfo !== null ? { lifeEventInfo: raw.lifeEventInfo } : {}),
     };
   };
 
@@ -460,7 +464,18 @@ export function simulateMonteCarlo(
   // RNG は触らない pure pre-compute なので phase1/phase2 のパス一致性に影響しない。
   const otherIncomePerYear = new Float64Array(totalYears + 1);
   for (let y = 1; y <= totalYears; y++) {
-    otherIncomePerYear[y] = sumOtherIncomeAt(otherIncomes, y - 1);
+    otherIncomePerYear[y] = sumOtherIncomeAt(otherIncomes, y);
+  }
+
+  // ライフイベント支出の事前展開（実質値のまま）
+  const lifeEventExpenseByYear = new Float64Array(totalYears + 1);
+  const lifeEventLabelByYear: (string | null)[] = new Array(totalYears + 1).fill(null);
+  for (let y = 1; y <= totalYears; y++) {
+    const evt = sumLifeEventsAt(lifeEvents, y);
+    if (evt !== null) {
+      lifeEventExpenseByYear[y] = evt.amount;
+      lifeEventLabelByYear[y] = evt.label;
+    }
   }
 
   for (let year = 1; year <= totalYears; year++) {
@@ -748,7 +763,8 @@ export function simulateMonteCarlo(
 
           const monOtherIncomeWithIdeco = monthOtherIncomeForYear + idecoPensionProceedsForMonth;
           const income = monthPension + monOtherIncomeWithIdeco;
-          const netWithdrawal = Math.max(baseWithdrawal - income, 0);
+          const monthLifeEventExpense = m === 0 ? (lifeEventExpenseByYear[year] ?? 0) : 0;
+          const netWithdrawal = Math.max(baseWithdrawal + monthLifeEventExpense - income, 0);
 
           if (recordPivot) {
             baseWithdrawalRecorded = baseWithdrawal;
@@ -943,6 +959,8 @@ export function simulateMonteCarlo(
 
         const isSequencePivot = pivotMaskByIndex !== null && (pivotMaskByIndex[i]! & (1 << SEQUENCE_BIT)) !== 0;
         if (recordPivot || isSequencePivot) {
+          const lifeEventLbl = m === 0 ? (lifeEventLabelByYear[year] ?? null) : null;
+          const lifeEventAmt = m === 0 ? (lifeEventExpenseByYear[year] ?? 0) : 0;
           const rawRow = {
             year,
             month: m + 1,
@@ -974,6 +992,9 @@ export function simulateMonteCarlo(
             idecoLumpSumInfo: idecoLumpSumRecorded,
             idecoPensionInfo: idecoPensionRecorded,
             jumpOccurred: jumpOccurredThisMonth,
+            lifeEventInfo: lifeEventAmt > 0 && lifeEventLbl != null
+              ? { amount: lifeEventAmt, label: lifeEventLbl }
+              : null,
           };
           if (recordPivot) {
             pushPivotRow(keysForMask(pivotMask), rawRow);

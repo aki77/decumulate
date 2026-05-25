@@ -2,6 +2,7 @@
 
 import { NISA_LIFETIME_LIMIT } from "../calculate.ts";
 import type { CalculateParams } from "../calculate.ts";
+import { sumLifeEventsAt } from "../life-event.ts";
 import type { MonteCarloYearly, MonteCarloResult } from "../monte-carlo.ts";
 import type { ParamsState, WithdrawalMode } from "./composables/useParams.ts";
 import type { SimulatorResult } from "./composables/useSimulator.ts";
@@ -160,6 +161,27 @@ function sectionPensionAndOtherIncome(state: ParamsState): string {
   return lines.join("\n");
 }
 
+function sectionLifeEvents(state: ParamsState): string {
+  const lines: string[] = ["### ライフイベント支出（一時出費）"];
+  if (state.lifeEvents.length === 0) {
+    lines.push("- なし");
+  } else {
+    lines.push("（金額は実質値、その年の1月に一括計上）");
+    lines.push("");
+    lines.push("| 年齢 | ラベル | 金額 |");
+    lines.push("| ---: | --- | ---: |");
+    const sorted = [...state.lifeEvents].sort((a, b) => a.age - b.age);
+    for (const e of sorted) {
+      const label = e.label || "（無題）";
+      lines.push(`| ${e.age}歳 | ${label} | ${e.amountMan.toLocaleString("ja-JP")}万 |`);
+    }
+    const totalMan = state.lifeEvents.reduce((s, e) => s + e.amountMan, 0);
+    lines.push("");
+    lines.push(`- **支出累計**: ${totalMan.toLocaleString("ja-JP")} 万円（実質値）`);
+  }
+  return lines.join("\n");
+}
+
 function sectionWithdrawalConstraints(state: ParamsState): string {
   const lines: string[] = ["### 取り崩し制約"];
   if (state.withdrawalMode === "zero-landing") {
@@ -271,6 +293,10 @@ function noteFor(year: number, state: ParamsState, params: CalculateParams): str
   if (state.basePensionMan > 0 && year === state.pensionStartAge - state.currentAge + 1) {
     notes.push("公的年金開始");
   }
+  const leAtYear = sumLifeEventsAt(params.lifeEvents, year);
+  if (leAtYear !== null) {
+    notes.push(`ライフイベント: ${leAtYear.label}（${Math.round(leAtYear.amount / MAN)}万）`);
+  }
   return notes.join("・");
 }
 
@@ -322,6 +348,11 @@ function sectionGlossary(state: ParamsState): string {
       "- **iDeCo 年金累計**: iDeCo年金受取の税引後累計。公的年金等控除は公的年金と合算枠で計算（2025年改正後の速算表）。",
     );
   }
+  if (state.lifeEvents.length > 0) {
+    lines.push(
+      "- **ライフイベント支出**: 実質値で入力し、その年の1月に一括計上。通常の取り崩しに加算され、3バケット分配・NISA温存ルール・防衛優先フラグが適用される。",
+    );
+  }
   return lines.join("\n");
 }
 
@@ -349,6 +380,7 @@ export function buildMarkdownReport(
     sectionInitialAssets(state),
     sectionIdeco(state),
     sectionPensionAndOtherIncome(state),
+    sectionLifeEvents(state),
     sectionWithdrawalConstraints(state),
     sectionRebalance(state),
     "## 主要メトリクス",

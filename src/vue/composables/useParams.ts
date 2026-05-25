@@ -1,6 +1,7 @@
 import { reactive, computed, ref, watch } from "vue";
 import { refDebounced } from "@vueuse/core";
 import { normalizeOtherIncomes, type OtherIncomeEntry } from "../../other-income.ts";
+import { normalizeLifeEvents, type LifeEventEntry } from "../../life-event.ts";
 import type { WithdrawalLimitStep } from "../../calculate.ts";
 import type { MonteCarloParams } from "../../monte-carlo.ts";
 import { findSafeWithdrawalRate, type SwrSearchResult } from "../../swr.ts";
@@ -333,6 +334,7 @@ export interface ParamsState {
   slowGoCoefPercent: number;
   enableJumpDiffusion: boolean;
   otherIncomes: OtherIncomeEntry[];
+  lifeEvents: LifeEventEntry[];
 }
 
 function newId(): string {
@@ -351,9 +353,10 @@ export function makeDefaultOtherIncomeEntry(): OtherIncomeEntry {
   };
 }
 
-export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps"> & {
+export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps" | "lifeEvents"> & {
   otherIncomes: never[];
   withdrawalLimitSteps: WithdrawalLimitStepInput[];
+  lifeEvents: never[];
 } = {
   currentAge: 40,
   initialNisaMan: 0,
@@ -409,6 +412,7 @@ export const DEFAULT_PARAMS: Omit<ParamsState, "otherIncomes" | "withdrawalLimit
   slowGoCoefPercent: 80,
   enableJumpDiffusion: false,
   otherIncomes: [],
+  lifeEvents: [],
 };
 
 // UI 入力の steps を計算層に渡せる schedule に正規化する。
@@ -481,6 +485,7 @@ export function useParams() {
       basePension: state.basePensionMan * MAN,
       pensionStartAge: state.pensionStartAge,
       otherIncomes: normalizeOtherIncomes(state.otherIncomes, state.currentAge, totalYears, MAN),
+      lifeEvents: normalizeLifeEvents(state.lifeEvents, state.currentAge, totalYears, MAN),
       defenseAnnualReturnRate: state.defenseAnnualReturnRate,
       defenseVolatility: state.defenseVolatility,
       targetDefenseRatioStart: state.targetDefenseRatioStartPercent,
@@ -549,6 +554,20 @@ export function useParams() {
   function removeOtherIncome(id: string): void {
     const idx = state.otherIncomes.findIndex((e) => e.id === id);
     if (idx !== -1) state.otherIncomes.splice(idx, 1);
+  }
+
+  function addLifeEvent(): void {
+    state.lifeEvents.push({
+      id: newId(),
+      label: "",
+      amountMan: 0,
+      age: state.currentAge + 10,
+    });
+  }
+
+  function removeLifeEvent(id: string): void {
+    const idx = state.lifeEvents.findIndex((e) => e.id === id);
+    if (idx !== -1) state.lifeEvents.splice(idx, 1);
   }
 
   // 終端行（配列の最終要素）の直前に新しいステップを挿入する。
@@ -642,6 +661,8 @@ export function useParams() {
     applyDefensePreset,
     addOtherIncome,
     removeOtherIncome,
+    addLifeEvent,
+    removeLifeEvent,
     addLimitStep,
     removeLimitStep,
     isComputingSwr,

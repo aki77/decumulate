@@ -63,6 +63,7 @@ const BASE_PARAMS: MonteCarloParams = {
   drawdownThresholdPercent: 10,
   skipRebalanceOnDrawdown: false,
   enableJumpDiffusion: false,
+  lifeEvents: [],
 };
 
 // 標準カーブ: Slow-Go=75歳開始、No-Go=85歳開始、Slow-Go係数=80%、No-Go月額=15万

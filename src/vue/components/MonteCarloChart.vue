@@ -4,6 +4,7 @@ import { Chart } from "chart.js";
 import { ensureChartRegistered } from "../composables/useChartJs.ts";
 import { buildPhaseAnnotations } from "../composables/phaseAnnotations.ts";
 import { extractJumpYears, buildJumpPointConfig } from "../composables/jumpAnnotations.ts";
+import { extractLifeEventYears, extractLifeEventInfo, buildLifeEventPointConfig, mergePointAnnotations } from "../composables/lifeEventAnnotations.ts";
 import { toMan, formatManValue } from "../format.ts";
 import { NUM_SIMULATIONS } from "../../monte-carlo.ts";
 import type { MonteCarloResult, MonteCarloParams } from "../../monte-carlo.ts";
@@ -53,6 +54,8 @@ const canvas = ref<HTMLCanvasElement | null>(null);
 let chart: Chart | null = null;
 let jumpYearsP50: number[] = [];
 let jumpYearsSeq: number[] = [];
+let lifeEventYearsP50: number[] = [];
+let lifeEventInfoP50 = new Map<number, string>();
 
 function buildChart(): void {
   if (!canvas.value) return;
@@ -92,8 +95,12 @@ function buildChart(): void {
 
   jumpYearsP50 = params.enableJumpDiffusion ? extractJumpYears(mc.pivotMonthlies.p50) : [];
   jumpYearsSeq = params.enableJumpDiffusion ? extractJumpYears(mc.sequenceP10Monthly) : [];
+  lifeEventYearsP50 = extractLifeEventYears(mc.pivotMonthlies.p50);
+  lifeEventInfoP50 = extractLifeEventInfo(mc.pivotMonthlies.p50);
   const p50JumpCfg = buildJumpPointConfig(jumpYearsP50, mc.yearly.length);
   const seqJumpCfg = buildJumpPointConfig(jumpYearsSeq, mc.yearly.length);
+  const p50LeCfg = buildLifeEventPointConfig(lifeEventYearsP50, mc.yearly.length);
+  const p50MergedCfg = mergePointAnnotations(p50JumpCfg, p50LeCfg, mc.yearly.length);
 
   const annotations = buildPhaseAnnotations({
     contributionYears: params.contributionYears,
@@ -120,7 +127,7 @@ function buildChart(): void {
           borderWidth: 2.5,
           fill: false,
           tension: 0.15,
-          ...p50JumpCfg,
+          ...p50MergedCfg,
         },
         ...(sequenceYearly ? [{
           label: "シーケンスリスクシナリオ (p10)",
@@ -167,6 +174,9 @@ function buildChart(): void {
               const lines: string[] = [];
               if (jumpYearsP50.includes(idx)) lines.push("▽ p50: ジャンプ発生年（暴落）");
               if (jumpYearsSeq.includes(idx)) lines.push("▽ シーケンスリスク: ジャンプ発生年（暴落）");
+              if (lifeEventInfoP50.has(idx)) {
+                lines.push(`★ p50: ライフイベント（${lifeEventInfoP50.get(idx)}）`);
+              }
               return lines;
             },
           },

@@ -224,6 +224,9 @@ const yearGroups = computed<YearGroup[]>(() => {
               <template v-if="row.src.idecoPensionInfo">
                 <span class="event-badge" data-kind="ideco-pension" tabindex="0" aria-label="iDeCo年金">◆<span class="event-tip">iDeCo 年金受取<br>受取総額 {{ formatMan(row.src.idecoPensionInfo.grossAmount) }}<br>税額 {{ formatMan(row.src.idecoPensionInfo.taxAmount) }}<br>税引後 {{ formatMan(row.src.idecoPensionInfo.proceeds) }}</span></span>
               </template>
+              <template v-if="row.src.lifeEventInfo">
+                <span class="event-badge" data-kind="life-event" tabindex="0" :aria-label="`ライフイベント: ${row.src.lifeEventInfo.label}`">★<span class="event-tip">ライフイベント<br>{{ row.src.lifeEventInfo.label }}<br>金額 {{ formatMan(row.src.lifeEventInfo.amount) }}</span></span>
+              </template>
             </td>
           </tr>
         </tbody>
@@ -386,6 +389,10 @@ const yearGroups = computed<YearGroup[]>(() => {
 
 .event-badge[data-kind="ideco-pension"] {
   color: #db2777;
+}
+
+.event-badge[data-kind="life-event"] {
+  color: #d97706;
 }
 
 .event-badge .event-tip {

@@ -23,6 +23,8 @@ const {
   removeOtherIncome,
   addLimitStep,
   removeLimitStep,
+  addLifeEvent,
+  removeLifeEvent,
   isComputingSwr,
   runSwrSearch,
   isComputingZeroLanding,
@@ -142,6 +144,8 @@ function handleExport() {
       @remove-other-income="removeOtherIncome"
       @add-limit-step="addLimitStep"
       @remove-limit-step="removeLimitStep"
+      @add-life-event="addLifeEvent"
+      @remove-life-event="removeLifeEvent"
       @request-swr="runSwrSearch"
       @request-zero-landing="runZeroLandingSolver"
       @reset="handleReset"

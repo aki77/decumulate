@@ -3,6 +3,7 @@
 // 口座構造: NISA(非課税) / 特定リスク(課税) / 防衛(課税) の3バケット + iDeCo（独立バケット）
 import { adjustedMonthlyPension, grossMonthlyPension } from "./pension.ts";
 import { sumOtherIncomeAt, type OtherIncomeMonthly } from "./other-income.ts";
+import { sumLifeEventsAt, type LifeEventAtYear } from "./life-event.ts";
 import {
   initIdecoState,
   stepIdeco,
@@ -55,6 +56,7 @@ export interface CalculateParams {
   pensionStartAge: number;
   currentAge: number;
   otherIncomes: OtherIncomeMonthly[];
+  lifeEvents: LifeEventAtYear[];
 
   // 防衛資産
   defenseAnnualReturnRate: number;
@@ -144,6 +146,8 @@ export interface MonthlyProjection {
   idecoPensionInfo: IdecoPayoutEvent | null;
   /** Mertonジャンプ拡散有効時に、この月にジャンプが発生したことを示す。決定論版・JD無効時・非pivotパスでは undefined。 */
   jumpOccurred?: boolean;
+  /** ライフイベント発生月のみ付与。その月の一時支出情報。 */
+  lifeEventInfo?: { amount: number; label: string };
 }
 
 export interface CompoundResult {
@@ -475,6 +479,7 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
     pensionStartAge,
     currentAge,
     otherIncomes,
+    lifeEvents,
     defenseAnnualReturnRate,
     targetDefenseRatioStart,
     targetDefenseRatioEnd,
@@ -698,6 +703,9 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
       let baseWithdrawal = 0;
       let monthPension = 0;
       let monthOtherIncome = 0;
+      const lifeEvt = m === 0 ? sumLifeEventsAt(lifeEvents, year) : null;
+      // 決定論版は名目値で計算するため year-1 年分のインフレ係数で名目化する。
+      const monthLifeEvent = lifeEvt ? lifeEvt.amount * Math.pow(1 + ri, year - 1) : 0;
 
       if (isWithdrawing && currentTotal > 0) {
         const riskSideForRate = nisaTotal + taxableRiskTotal + idecoState.total;
@@ -765,11 +773,11 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         const pensionActive =
           pensionStartYearOffset != null && year >= pensionStartYearOffset && monthlyPension > 0;
         monthPension = pensionActive ? monthlyPension : 0;
-        // year は 1-based、normalizeOtherIncomes の startYearOffset は 0-based なので year - 1 で揃える。
         // iDeCo の年金受取分は otherIncome と同様に支出充当する。
-        monthOtherIncome = sumOtherIncomeAt(otherIncomes, year - 1) + idecoPensionProceeds;
+        monthOtherIncome = sumOtherIncomeAt(otherIncomes, year) + idecoPensionProceeds;
         const income = monthPension + monthOtherIncome;
-        const netWithdrawal = Math.max(baseWithdrawal - income, 0);
+        const grossOutflow = baseWithdrawal + monthLifeEvent;
+        const netWithdrawal = Math.max(grossOutflow - income, 0);
 
         const [fromRiskSide, fromDefense] = defensePriorityOnDrawdown
           ? splitRiskFirst(netWithdrawal, liquidRiskSide, defenseTotal)
@@ -885,6 +893,9 @@ export function calculateCompound(params: CalculateParams): CompoundResult {
         nisaTransferInfo: m === 0 ? yearStartTransferInfo : null,
         idecoLumpSumInfo,
         idecoPensionInfo,
+        ...(lifeEvt && monthLifeEvent > 0
+          ? { lifeEventInfo: { amount: monthLifeEvent, label: lifeEvt.label } }
+          : {}),
       });
     }
 

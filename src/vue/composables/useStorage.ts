@@ -1,11 +1,12 @@
 import { watchDebounced } from "@vueuse/core";
 import type { OtherIncomeEntry } from "../../other-income.ts";
+import type { LifeEventEntry } from "../../life-event.ts";
 import type { ParamsState, WithdrawalLimitStepInput } from "./useParams.ts";
 
 const STORAGE_KEY = "decumulate:inputs";
 const LEGACY_V8_KEY = "decumulate:inputs:v8";
 
-export const CURRENT_VERSION = 8 as const;
+export const CURRENT_VERSION = 9 as const;
 
 export interface Migration {
   from: number;
@@ -13,16 +14,19 @@ export interface Migration {
   migrate: (data: any) => any;
 }
 
-export const MIGRATIONS: readonly Migration[] = [];
+export const MIGRATIONS: readonly Migration[] = [
+  { from: 8, to: 9, migrate: (data: unknown) => ({ ...(data as object), lifeEvents: [] }) },
+];
 
 export interface StoragePayload {
   version: number;
   data: unknown;
 }
 
-type StoredState = Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps"> & {
+type StoredState = Omit<ParamsState, "otherIncomes" | "withdrawalLimitSteps" | "lifeEvents"> & {
   otherIncomes: OtherIncomeEntry[];
   withdrawalLimitSteps: WithdrawalLimitStepInput[];
+  lifeEvents: LifeEventEntry[];
 };
 
 function isOtherIncomeEntry(v: unknown): v is OtherIncomeEntry {
@@ -35,6 +39,17 @@ function isOtherIncomeEntry(v: unknown): v is OtherIncomeEntry {
     (o["amountMode"] === "monthly" || o["amountMode"] === "annual") &&
     (o["startAge"] === null || typeof o["startAge"] === "number") &&
     (o["endAge"] === null || typeof o["endAge"] === "number")
+  );
+}
+
+function isLifeEventEntry(v: unknown): v is LifeEventEntry {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o["id"] === "string" &&
+    typeof o["label"] === "string" &&
+    typeof o["amountMan"] === "number" &&
+    typeof o["age"] === "number"
   );
 }
 
@@ -100,6 +115,11 @@ export function parseStoredState(data: unknown): Partial<StoredState> | null {
   const rawOi = src["otherIncomes"];
   if (Array.isArray(rawOi)) {
     result.otherIncomes = rawOi.filter(isOtherIncomeEntry);
+  }
+
+  const rawLe = src["lifeEvents"];
+  if (Array.isArray(rawLe)) {
+    result.lifeEvents = rawLe.filter(isLifeEventEntry);
   }
 
   const rawSteps = src["withdrawalLimitSteps"];

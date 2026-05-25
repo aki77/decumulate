@@ -73,7 +73,9 @@ test("buildJumpPointConfig: ジャンプ年のインデックスにのみ radius
   assert.strictEqual(cfg.pointBackgroundColor[2], "rgba(127, 29, 29, 0.95)");
   assert.strictEqual(cfg.pointBackgroundColor[0], "transparent");
   assert.strictEqual(cfg.pointStyle, "triangle");
-  assert.strictEqual(cfg.pointRotation, 180);
+  assert.strictEqual(cfg.pointRotation[2], 180);
+  assert.strictEqual(cfg.pointRotation[5], 180);
+  assert.strictEqual(cfg.pointRotation[0], 0);
 });
 
 test("buildJumpPointConfig: yearlyLength を超える year は無視される", () => {

@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   TAX_RATE,
@@ -17,6 +17,8 @@ import {
   type CalculateParams,
   type WithdrawalLimitStep,
 } from "../src/calculate.ts";
+import { normalizeLifeEvents } from "../src/life-event.ts";
+import { normalizeOtherIncomes } from "../src/other-income.ts";
 
 // 終端のみ 1 行の schedule を作るヘルパー。「年齢ステップなし」相当のクランプ条件をシンプルに表現する。
 function limit(floor: number | null, ceiling: number | null): WithdrawalLimitStep[] {
@@ -50,6 +52,7 @@ const BASE_PARAMS: CalculateParams = {
   pensionStartAge: 65,
   currentAge: 40,
   otherIncomes: [],
+  lifeEvents: [],
   defenseAnnualReturnRate: 0,
   targetDefenseRatioStart: 0,
   targetDefenseRatioEnd: 0,
@@ -1056,8 +1059,8 @@ test("calculateCompound (otherIncomes) - 複数件の合算（重複期間は足
     withdrawalYears: 5,
     fixedMonthlyWithdrawal: 50000,
     otherIncomes: [
-      { monthlyAmount: 10000, startYearOffset: 0, endYearOffset: 3 },
-      { monthlyAmount: 5000, startYearOffset: 1, endYearOffset: 4 },
+      { monthlyAmount: 10000, startYearOffset: 1, endYearOffset: 3 },
+      { monthlyAmount: 5000, startYearOffset: 2, endYearOffset: 4 },
     ],
   });
   assert.strictEqual(result.yearly[1]!.yearlyOtherIncome, 10000 * 12);
@@ -1898,4 +1901,153 @@ test("zero-landing 動的取り崩し（決定論版）: No-Go 期は noGoMonthl
       `No-Go 期: baseWithdrawal=${row.baseWithdrawal} が noGoMonthly=${noGoMonthly} に固定のはず (age=${row.age})`,
     );
   }
+});
+
+// --- ライフイベント ---
+
+describe("ライフイベント支出", () => {
+  const MAN = 10000;
+
+  test("単一イベント（5年後 200万）が netWithdrawal に上乗せされる", () => {
+    const params: CalculateParams = {
+      ...BASE_PARAMS,
+      inflationRate: 0,
+      withdrawalStartYear: 0,
+      withdrawalYears: 10,
+      fixedMonthlyWithdrawal: 50_000,
+      lifeEvents: [{ yearOffset: 5, amount: 200 * MAN, label: "車買い替え" }],
+    };
+    const result = calculateCompound(params);
+    // yearOffset=5 → year=5 でヒット（1-based 照合キー）
+    const eventRow = result.monthly.find((r) => r.year === 5 && r.month === 1);
+    assert.ok(eventRow, "year=5 の 1 月行が存在する");
+    assert.ok(eventRow.lifeEventInfo, "lifeEventInfo が付与される");
+    assert.equal(eventRow.lifeEventInfo!.label, "車買い替え");
+    // イベントがない他の月はなし
+    const nonEventRow = result.monthly.find((r) => r.year === 5 && r.month === 2);
+    assert.equal(nonEventRow?.lifeEventInfo, undefined);
+  });
+
+  test("インフレ率 2% 時: 10年後イベントは名目化される（≒ amount * 1.02^9）", () => {
+    const realAmount = 200 * MAN;
+    const inflationRate = 2;
+    const ri = inflationRate / 100;
+    const params: CalculateParams = {
+      ...BASE_PARAMS,
+      inflationRate,
+      withdrawalStartYear: 0,
+      withdrawalYears: 15,
+      fixedMonthlyWithdrawal: 10_000,
+      lifeEvents: [{ yearOffset: 10, amount: realAmount, label: "test" }],
+    };
+    const result = calculateCompound(params);
+    // yearOffset=10 → year=10 でヒット。名目化係数は year - 1 = 9 年分。
+    const eventRow = result.monthly.find((r) => r.year === 10 && r.month === 1);
+    assert.ok(eventRow?.lifeEventInfo, "lifeEventInfo が付与される");
+    const expected = Math.round(realAmount * Math.pow(1 + ri, 9));
+    assert.ok(
+      Math.abs(eventRow.lifeEventInfo!.amount - expected) < 10,
+      `名目化後 amount=${eventRow.lifeEventInfo!.amount} が期待値=${expected} に近いはず`,
+    );
+  });
+
+  test("資産不足時は fail-soft（残高 0 になるがエラーなし）", () => {
+    const params: CalculateParams = {
+      ...BASE_PARAMS,
+      initialTaxableRisk: 100 * MAN,
+      inflationRate: 0,
+      withdrawalStartYear: 0,
+      withdrawalYears: 5,
+      fixedMonthlyWithdrawal: 1_000,
+      lifeEvents: [{ yearOffset: 1, amount: 2000 * MAN, label: "高額イベント" }],
+    };
+    // エラーがスローされないことを確認
+    assert.doesNotThrow(() => calculateCompound(params));
+    const result = calculateCompound(params);
+    // 資産が 0 以上であることを確認（負にならない）
+    for (const row of result.monthly) {
+      assert.ok(row.total >= 0, `total=${row.total} が負にならない`);
+    }
+  });
+
+  test("回帰: currentAge=40, age=70 のイベントは age=70 の月次行（1月）でヒットする", () => {
+    const events = normalizeLifeEvents(
+      [{ id: "1", label: "家購入", amountMan: 2000, age: 70 }],
+      40,
+      40,
+      MAN,
+    );
+    assert.equal(events.length, 1);
+    assert.equal(events[0]!.yearOffset, 30);
+    const params: CalculateParams = {
+      ...BASE_PARAMS,
+      ...nisaOnly(20000 * MAN),
+      currentAge: 40,
+      inflationRate: 0,
+      withdrawalStartYear: 0,
+      withdrawalYears: 35,
+      fixedMonthlyWithdrawal: 10_000,
+      lifeEvents: events,
+    };
+    const result = calculateCompound(params);
+    const hit = result.monthly.find((r) => r.age === 70 && r.month === 1);
+    assert.ok(hit, "age=70 の 1月行が存在する");
+    assert.ok(hit.lifeEventInfo, "age=70 の 1月行に lifeEventInfo が付与される");
+    assert.equal(hit.lifeEventInfo!.label, "家購入");
+    // age=71 / age=69 の同月にはイベント情報が無いこと
+    const before = result.monthly.find((r) => r.age === 69 && r.month === 1);
+    const after = result.monthly.find((r) => r.age === 71 && r.month === 1);
+    assert.equal(before?.lifeEventInfo, undefined);
+    assert.equal(after?.lifeEventInfo, undefined);
+  });
+});
+
+// --- 副収入の境界（inclusive） ---
+
+describe("副収入 inclusive 境界", () => {
+  const MAN = 10000;
+
+  test("回帰: startAge=35, endAge=40 → age=35〜40 で monthOtherIncome > 0、age=41 で 0", () => {
+    const otherIncomes = normalizeOtherIncomes(
+      [
+        {
+          id: "1",
+          label: "アルバイト",
+          amountMan: 5,
+          amountMode: "monthly",
+          startAge: 35,
+          endAge: 40,
+        },
+      ],
+      30,
+      40,
+      MAN,
+    );
+    assert.equal(otherIncomes.length, 1);
+    const params: CalculateParams = {
+      ...BASE_PARAMS,
+      ...nisaOnly(5000 * MAN),
+      currentAge: 30,
+      inflationRate: 0,
+      withdrawalStartYear: 0,
+      withdrawalYears: 20,
+      fixedMonthlyWithdrawal: 10_000,
+      otherIncomes,
+    };
+    const result = calculateCompound(params);
+    for (let age = 35; age <= 40; age++) {
+      const row = result.monthly.find((r) => r.age === age && r.month === 1);
+      assert.ok(row, `age=${age} の月次行が存在する`);
+      assert.ok(
+        row.monthlyOtherIncome > 0,
+        `age=${age} の monthOtherIncome=${row.monthlyOtherIncome} > 0`,
+      );
+    }
+    const after = result.monthly.find((r) => r.age === 41 && r.month === 1);
+    assert.ok(after);
+    assert.equal(after.monthlyOtherIncome, 0);
+    const before = result.monthly.find((r) => r.age === 34 && r.month === 1);
+    assert.ok(before);
+    assert.equal(before.monthlyOtherIncome, 0);
+  });
 });

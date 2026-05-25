@@ -10,6 +10,7 @@ import InputPeriod from "./InputPeriod.vue";
 import InputWithdrawal from "./InputWithdrawal.vue";
 import InputIdeco from "./InputIdeco.vue";
 import InputPension from "./InputPension.vue";
+import InputLifeEvents from "./InputLifeEvents.vue";
 import InputScenarioPreset from "./InputScenarioPreset.vue";
 
 const props = defineProps<{
@@ -24,6 +25,8 @@ const emit = defineEmits<{
   applyDefensePreset: [key: string];
   addOtherIncome: [];
   removeOtherIncome: [id: string];
+  addLifeEvent: [];
+  removeLifeEvent: [id: string];
   addLimitStep: [];
   removeLimitStep: [idx: number];
   requestSwr: [];
@@ -100,6 +103,11 @@ watch(
               v-model="state"
               @add-other-income="emit('addOtherIncome')"
               @remove-other-income="emit('removeOtherIncome', $event)"
+            />
+            <InputLifeEvents
+              v-model="state"
+              @add-life-event="emit('addLifeEvent')"
+              @remove-life-event="emit('removeLifeEvent', $event)"
             />
             <div class="form-actions">
               <div class="form-actions-left">

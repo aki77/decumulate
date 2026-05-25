@@ -144,6 +144,9 @@ export function stepIdeco(
   let lumpSum: IdecoPayoutEvent | null = null;
   let pension: IdecoPayoutEvent | null = null;
 
+  // FIXME: ライフイベント・副収入と同じく +1歳ズレを持つ。受取開始 age が表示 age とズレるため、
+  // 年金（pensionStartYearOffset）と semantic を揃えるなら別タスクで修正する。
+  // スナップショット系テストへの影響が大きいので、当面は現状維持。
   const isReceiveStartMonth = year === receiveStartYearOffset + 1 && m === 0;
   if (isReceiveStartMonth && total > 0) {
     const ratio = Math.max(0, Math.min(1, idecoLumpSumRatio));
