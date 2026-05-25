@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { MonthlyProjection, CalculateParams } from "../../calculate.ts";
+import type { MonthlyProjection, CalculateParams, RebalanceInfo } from "../../calculate.ts";
 import HelpIcon from "./HelpIcon.vue";
+import EventBadge from "./EventBadge.vue";
 import { toMan, formatMan, formatPercent } from "../format.ts";
+
+function rebalanceDirectionLabel(direction: RebalanceInfo["direction"]): string {
+  return direction === "risk-to-defense" ? "リスク → 防衛" : "防衛 → リスク";
+}
 
 const props = defineProps<{
   monthly: MonthlyProjection[];
@@ -147,7 +152,7 @@ const yearGroups = computed<YearGroup[]>(() => {
       <summary>
         {{ g.age != null ? `${g.year}年目 / ${g.age}歳` : `${g.year}年目` }}
         <template v-for="b in YEAR_EVENT_BADGES" :key="b.key">
-          <span v-if="g.yearEvents[b.key]" class="event-badge year-event-badge" :data-kind="b.kind" tabindex="0" :aria-label="b.label">{{ b.symbol }}<span class="event-tip">{{ b.tip }}</span></span>
+          <EventBadge v-if="g.yearEvents[b.key]" :symbol="b.symbol" :kind="b.kind" :ariaLabel="b.label" variant="year">{{ b.tip }}</EventBadge>
         </template>
         <template v-if="g.base">
           <span class="year-summary">
@@ -240,21 +245,11 @@ const yearGroups = computed<YearGroup[]>(() => {
             <td>{{ formatMan(row.src.monthlyOtherIncome) }}</td>
             <td class="monthly-rate" :data-rate-band="classifyRateBand(row.src.monthlyRate, false)">{{ formatRate(row.src.monthlyRate) }}</td>
             <td>
-              <template v-if="row.src.nisaTransferInfo">
-                <span class="event-badge" data-kind="transfer" tabindex="0" aria-label="NISA振替">▲<span class="event-tip">特定 → NISA 振替<br>売却額 {{ formatMan(row.src.nisaTransferInfo.sellAmount) }}<br>税額 {{ formatMan(row.src.nisaTransferInfo.taxAmount) }}<br>NISA買付 {{ formatMan(row.src.nisaTransferInfo.proceeds) }}</span></span>
-              </template>
-              <template v-if="row.src.rebalanceInfo">
-                <span class="event-badge" data-kind="rebalance" :data-direction="row.src.rebalanceInfo.direction" tabindex="0" :aria-label="row.src.rebalanceInfo.direction === 'risk-to-defense' ? 'リスク → 防衛' : '防衛 → リスク'">●<span class="event-tip"><template v-if="row.src.rebalanceInfo.direction === 'risk-to-defense'">リスク → 防衛</template><template v-else>防衛 → リスク</template><br>売却額 {{ formatMan(row.src.rebalanceInfo.sellAmount) }}<br>税額 {{ formatMan(row.src.rebalanceInfo.taxAmount) }}<br>受取額 {{ formatMan(row.src.rebalanceInfo.proceeds) }}<template v-if="row.src.rebalanceInfo.nisaUsed > 0"><br>うちNISA枠充当 {{ formatMan(row.src.rebalanceInfo.nisaUsed) }}</template></span></span>
-              </template>
-              <template v-if="row.src.idecoLumpSumInfo">
-                <span class="event-badge" data-kind="ideco-lump" tabindex="0" aria-label="iDeCo一時金">■<span class="event-tip">iDeCo 一時金受取<br>受取総額 {{ formatMan(row.src.idecoLumpSumInfo.grossAmount) }}<br>税額 {{ formatMan(row.src.idecoLumpSumInfo.taxAmount) }}<br>特定リスクへ {{ formatMan(row.src.idecoLumpSumInfo.proceeds) }}</span></span>
-              </template>
-              <template v-if="row.src.idecoPensionInfo">
-                <span class="event-badge" data-kind="ideco-pension" tabindex="0" aria-label="iDeCo年金">◆<span class="event-tip">iDeCo 年金受取<br>受取総額 {{ formatMan(row.src.idecoPensionInfo.grossAmount) }}<br>税額 {{ formatMan(row.src.idecoPensionInfo.taxAmount) }}<br>税引後 {{ formatMan(row.src.idecoPensionInfo.proceeds) }}</span></span>
-              </template>
-              <template v-if="row.src.lifeEventInfo">
-                <span class="event-badge" data-kind="life-event" tabindex="0" :aria-label="`ライフイベント: ${row.src.lifeEventInfo.label}`">★<span class="event-tip">ライフイベント<br>{{ row.src.lifeEventInfo.label }}<br>金額 {{ formatMan(row.src.lifeEventInfo.amount) }}</span></span>
-              </template>
+              <EventBadge v-if="row.src.nisaTransferInfo" symbol="▲" kind="transfer" ariaLabel="NISA振替">特定 → NISA 振替<br>売却額 {{ formatMan(row.src.nisaTransferInfo.sellAmount) }}<br>税額 {{ formatMan(row.src.nisaTransferInfo.taxAmount) }}<br>NISA買付 {{ formatMan(row.src.nisaTransferInfo.proceeds) }}</EventBadge>
+              <EventBadge v-if="row.src.rebalanceInfo" symbol="●" kind="rebalance" :direction="row.src.rebalanceInfo.direction" :ariaLabel="rebalanceDirectionLabel(row.src.rebalanceInfo.direction)">{{ rebalanceDirectionLabel(row.src.rebalanceInfo.direction) }}<br>売却額 {{ formatMan(row.src.rebalanceInfo.sellAmount) }}<br>税額 {{ formatMan(row.src.rebalanceInfo.taxAmount) }}<br>受取額 {{ formatMan(row.src.rebalanceInfo.proceeds) }}<template v-if="row.src.rebalanceInfo.nisaUsed > 0"><br>うちNISA枠充当 {{ formatMan(row.src.rebalanceInfo.nisaUsed) }}</template></EventBadge>
+              <EventBadge v-if="row.src.idecoLumpSumInfo" symbol="■" kind="ideco-lump" ariaLabel="iDeCo一時金">iDeCo 一時金受取<br>受取総額 {{ formatMan(row.src.idecoLumpSumInfo.grossAmount) }}<br>税額 {{ formatMan(row.src.idecoLumpSumInfo.taxAmount) }}<br>特定リスクへ {{ formatMan(row.src.idecoLumpSumInfo.proceeds) }}</EventBadge>
+              <EventBadge v-if="row.src.idecoPensionInfo" symbol="◆" kind="ideco-pension" ariaLabel="iDeCo年金">iDeCo 年金受取<br>受取総額 {{ formatMan(row.src.idecoPensionInfo.grossAmount) }}<br>税額 {{ formatMan(row.src.idecoPensionInfo.taxAmount) }}<br>税引後 {{ formatMan(row.src.idecoPensionInfo.proceeds) }}</EventBadge>
+              <EventBadge v-if="row.src.lifeEventInfo" symbol="★" kind="life-event" :ariaLabel="`ライフイベント: ${row.src.lifeEventInfo.label}`">ライフイベント<br>{{ row.src.lifeEventInfo.label }}<br>金額 {{ formatMan(row.src.lifeEventInfo.amount) }}</EventBadge>
             </td>
           </tr>
         </tbody>
@@ -274,10 +269,6 @@ const yearGroups = computed<YearGroup[]>(() => {
   font-size: 13px;
   padding: 4px 0;
   color: var(--text);
-}
-
-.year-event-badge {
-  margin-left: 4px;
 }
 
 .year-summary {
@@ -394,65 +385,4 @@ const yearGroups = computed<YearGroup[]>(() => {
   color: var(--muted);
 }
 
-.event-badge {
-  position: relative;
-  display: inline-block;
-  cursor: help;
-  font-weight: 700;
-  user-select: none;
-  margin-right: 2px;
-}
-
-.event-badge[data-kind="transfer"] {
-  color: #16a34a;
-}
-
-.event-badge[data-kind="rebalance"][data-direction="risk-to-defense"] {
-  color: var(--accent);
-}
-
-.event-badge[data-kind="rebalance"][data-direction="defense-to-risk"] {
-  color: var(--warn);
-}
-
-.event-badge[data-kind="ideco-lump"] {
-  color: #9333ea;
-}
-
-.event-badge[data-kind="ideco-pension"] {
-  color: #db2777;
-}
-
-.event-badge[data-kind="life-event"] {
-  color: #d97706;
-}
-
-.event-badge .event-tip {
-  visibility: hidden;
-  opacity: 0;
-  position: absolute;
-  bottom: calc(100% + 6px);
-  right: 0;
-  background: var(--text);
-  color: var(--panel);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.5;
-  padding: 8px 10px;
-  border-radius: 6px;
-  width: max-content;
-  max-width: 240px;
-  white-space: normal;
-  text-align: left;
-  z-index: 10;
-  pointer-events: none;
-  transition: opacity 0.15s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-}
-
-.event-badge:hover .event-tip,
-.event-badge:focus .event-tip {
-  visibility: visible;
-  opacity: 1;
-}
 </style>
