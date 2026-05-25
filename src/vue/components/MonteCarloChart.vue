@@ -5,11 +5,13 @@ import { ensureChartRegistered } from "../composables/useChartJs.ts";
 import { buildPhaseAnnotations } from "../composables/phaseAnnotations.ts";
 import { extractJumpYears, buildJumpPointConfig } from "../composables/jumpAnnotations.ts";
 import { extractLifeEventYears, extractLifeEventInfo, buildLifeEventPointConfig, mergePointAnnotations } from "../composables/lifeEventAnnotations.ts";
-import { toMan, formatManValue } from "../format.ts";
+import { toMan, formatManValue, formatMan } from "../format.ts";
 import { NUM_SIMULATIONS } from "../../monte-carlo.ts";
 import type { MonteCarloResult, MonteCarloParams } from "../../monte-carlo.ts";
 
 ensureChartRegistered();
+
+const BAND_LABELS = new Set(["p10", "p10〜p25", "p25〜p50", "p50〜p75", "p75〜p90"]);
 
 const props = defineProps<{
   mc: MonteCarloResult;
@@ -113,11 +115,11 @@ function buildChart(): void {
     data: {
       labels,
       datasets: [
-        { label: "p10", data: p10Cum, backgroundColor: "rgba(59, 130, 246, 0.08)", borderWidth: 0, fill: "origin", pointRadius: 0 },
-        { label: "p10〜p25", data: p25Cum, backgroundColor: "rgba(59, 130, 246, 0.15)", borderWidth: 0, fill: "-1", pointRadius: 0 },
-        { label: "p25〜p50", data: p50Cum, backgroundColor: "rgba(59, 130, 246, 0.3)", borderWidth: 0, fill: "-1", pointRadius: 0 },
-        { label: "p50〜p75", data: p75Cum, backgroundColor: "rgba(59, 130, 246, 0.3)", borderWidth: 0, fill: "-1", pointRadius: 0 },
-        { label: "p75〜p90", data: p90Cum, backgroundColor: "rgba(59, 130, 246, 0.15)", borderWidth: 0, fill: "-1", pointRadius: 0 },
+        { label: "p10", data: p10Cum, backgroundColor: "transparent", borderWidth: 0, fill: false, pointRadius: 0 },
+        { label: "p10〜p25", data: p25Cum, backgroundColor: "rgba(59, 130, 246, 0.18)", borderWidth: 0, fill: "-1", pointRadius: 0 },
+        { label: "p25〜p50", data: p50Cum, backgroundColor: "rgba(59, 130, 246, 0.35)", borderWidth: 0, fill: "-1", pointRadius: 0 },
+        { label: "p50〜p75", data: p75Cum, backgroundColor: "rgba(59, 130, 246, 0.35)", borderWidth: 0, fill: "-1", pointRadius: 0 },
+        { label: "p75〜p90", data: p90Cum, backgroundColor: "rgba(59, 130, 246, 0.18)", borderWidth: 0, fill: "-1", pointRadius: 0 },
         {
           label: "中央値 (p50)",
           data: p50Cum,
@@ -164,14 +166,29 @@ function buildChart(): void {
         x: { title: { display: true, text: params.currentAge != null ? "年齢" : "経過年数" } },
       },
       plugins: {
-        legend: { position: "bottom" },
+        legend: {
+          position: "bottom",
+          labels: {
+            filter: (item) => !BAND_LABELS.has(item.text ?? ""),
+          },
+        },
         tooltip: {
+          filter: (item) => !BAND_LABELS.has(item.dataset.label ?? ""),
           callbacks: {
             label: (ctx) => `${ctx.dataset.label}: ${formatManValue(ctx.parsed.y as number)}`,
             afterBody: (items) => {
               const idx = items[0]?.dataIndex;
               if (idx == null) return [];
+              const y = mc.yearly[idx];
               const lines: string[] = [];
+              if (y) {
+                lines.push(
+                  `p10: ${formatMan(y.p10)}`,
+                  `p25: ${formatMan(y.p25)}`,
+                  `p75: ${formatMan(y.p75)}`,
+                  `p90: ${formatMan(y.p90)}`,
+                );
+              }
               if (jumpYearsP50.includes(idx)) lines.push("▽ p50: ジャンプ発生年（暴落）");
               if (jumpYearsSeq.includes(idx)) lines.push("▽ シーケンスリスク: ジャンプ発生年（暴落）");
               if (lifeEventInfoP50.has(idx)) {
