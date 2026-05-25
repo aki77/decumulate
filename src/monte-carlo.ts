@@ -565,10 +565,10 @@ export function simulateMonteCarlo(
         useIdeco &&
         ideco.idecoMonthlyContribution > 0 &&
         year <= ideco.idecoContributionYears &&
-        year <= idecoReceiveOffset;
+        year < idecoReceiveOffset;
       const idecoIsLumpSumMonth =
-        useIdeco && year === idecoReceiveOffset + 1 && m === 0 && idecoLumpRatio > 0;
-      const idecoMonthIndex = (year - 1 - idecoReceiveOffset) * 12 + m;
+        useIdeco && year === idecoReceiveOffset && m === 0 && idecoLumpRatio > 0;
+      const idecoMonthIndex = (year - idecoReceiveOffset) * 12 + m;
       const idecoIsPensionMonth =
         useIdeco &&
         idecoLumpRatio < 1 &&

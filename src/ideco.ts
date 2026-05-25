@@ -135,7 +135,7 @@ export function stepIdeco(
   if (
     idecoMonthlyContribution > 0 &&
     year <= idecoContributionYears &&
-    year <= receiveStartYearOffset
+    year < receiveStartYearOffset
   ) {
     total += idecoMonthlyContribution;
     principal += idecoMonthlyContribution;
@@ -144,10 +144,8 @@ export function stepIdeco(
   let lumpSum: IdecoPayoutEvent | null = null;
   let pension: IdecoPayoutEvent | null = null;
 
-  // FIXME: ライフイベント・副収入と同じく +1歳ズレを持つ。受取開始 age が表示 age とズレるため、
-  // 年金（pensionStartYearOffset）と semantic を揃えるなら別タスクで修正する。
-  // スナップショット系テストへの影響が大きいので、当面は現状維持。
-  const isReceiveStartMonth = year === receiveStartYearOffset + 1 && m === 0;
+  // year=offset の 1月に受取開始。表示 age=currentAge+year=receiveAge と一致する。
+  const isReceiveStartMonth = year === receiveStartYearOffset && m === 0;
   if (isReceiveStartMonth && total > 0) {
     const ratio = Math.max(0, Math.min(1, idecoLumpSumRatio));
     if (ratio > 0) {
@@ -162,7 +160,7 @@ export function stepIdeco(
 
   const pensionTotalMonths = idecoLumpSumRatio < 1 ? Math.max(0, idecoPensionYears) * 12 : 0;
   if (pensionTotalMonths > 0 && total > 0) {
-    const monthIndex = (year - 1 - receiveStartYearOffset) * 12 + m;
+    const monthIndex = (year - receiveStartYearOffset) * 12 + m;
     if (monthIndex >= 0 && monthIndex < pensionTotalMonths) {
       const remainMonths = pensionTotalMonths - monthIndex;
       const gross = remainMonths > 0 ? total / remainMonths : total;
